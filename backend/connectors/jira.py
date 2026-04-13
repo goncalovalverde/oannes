@@ -43,11 +43,24 @@ def _format_jira_error(error: Exception, context: str = "") -> str:
                 f"Invalid Jira request. {context} "
                 "Check your project key and configuration."
             )
+        elif status == 500:
+            return (
+                "Jira server error (500). The Jira instance may be down or misconfigured. "
+                "Please try again in a few moments."
+            )
         else:
             return (
                 f"Jira API error ({status}). {context} "
                 "Check your Jira URL and try again."
             )
+    
+    # Handle JSON parsing errors
+    if 'json' in error_str.lower() or 'expecting value' in error_str.lower():
+        return (
+            "Jira API returned invalid data. This usually means: (1) your Jira URL is wrong, "
+            "(2) the server is misconfigured, or (3) there's a proxy/firewall interfering. "
+            "Check your Jira URL and network connection."
+        )
     
     # Handle connection errors
     if 'timeout' in error_str.lower() or 'connection' in error_str.lower():
