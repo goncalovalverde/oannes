@@ -111,7 +111,7 @@ export default function MonteCarlo() {
           {/* Chart */}
           <div className="bg-surface border border-border rounded-xl p-5">
             <div className="text-sm font-bold mb-1">Probability Distribution</div>
-            <div className="text-xs text-muted mb-4">Monte Carlo simulation — {result.simulations.toLocaleString()} runs</div>
+            <div className="text-xs text-muted mb-4">Monte Carlo simulation — {result.simulations?.toLocaleString() ?? '10,000'} runs</div>
             <MonteCarloChart result={result} />
           </div>
         </>

@@ -19,9 +19,9 @@ export default function MonteCarloChart({ result }: Props) {
     hovertemplate: `${xLabel}: %{x}<br>Probability: %{y:.1%}<extra></extra>`,
   }]
 
-  // Percentile markers — both modes use result.percentiles
+  // Percentile markers — only for how_many mode (when_done percentiles are dates, not week numbers)
   const pcts = result.percentiles
-  if (pcts) {
+  if (pcts && !isWhenDone) {
     const markers = [
       { key: '50', color: COLORS.success, label: '50%' },
       { key: '85', color: COLORS.warning, label: '85%' },
@@ -29,7 +29,7 @@ export default function MonteCarloChart({ result }: Props) {
     ]
     markers.forEach(({ key, color, label }) => {
       const val = pcts[key]
-      if (val != null) {
+      if (val != null && typeof val === 'number') {
         traces.push({
           type: 'scatter', mode: 'lines', name: label,
           x: [val, val], y: [0, Math.max(...result.histogram.map(d => d.probability))],

@@ -579,9 +579,9 @@ def run_monte_carlo(data: MonteCarloRequest, db: Session = Depends(get_db)):
 
     if data.backlog_size is not None:
         result = simulate_when_done(throughput_series, data.backlog_size, data.simulations)
-        return {"mode": "when_done", **result}
+        return {"mode": "when_done", "simulations": data.simulations, **result}
     elif data.target_weeks is not None:
         result = simulate_how_many(throughput_series, data.target_weeks, data.simulations)
-        return {"mode": "how_many", **result}
+        return {"mode": "how_many", "simulations": data.simulations, **result}
     else:
         raise HTTPException(status_code=400, detail="Either backlog_size or target_weeks required")
