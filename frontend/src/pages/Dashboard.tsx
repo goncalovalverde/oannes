@@ -70,24 +70,24 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Charts */}
+      {/* Charts — 2×2 grid: Quality | Cycle Time / Throughput | Net Flow */}
       <div className="grid grid-cols-2 gap-4">
+        {/* 1 — Quality Rate */}
         <div className="bg-surface border border-border rounded-xl p-5">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <div className="text-sm font-bold">Throughput</div>
-              <div className="text-xs text-muted mt-0.5">Items completed per week</div>
+              <div className="text-sm font-bold">Quality Rate</div>
+              <div className="text-xs text-muted mt-0.5">% of completed items that are NOT bugs or defects per week</div>
             </div>
-            <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{weeks} wks</span>
+            <span className="text-[10px] font-semibold bg-success/15 text-success px-2 py-1 rounded-full">{weeks} wks</span>
           </div>
-          {isLoading ? <ChartSkeleton /> : <ThroughputChart data={throughputData} weeks={weeks} />}
-          {summary && (
-            <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
-              💡 Throughput trending {summary.throughput_trend_pct >= 0 ? 'up' : 'down'} — avg <strong className="text-text">{summary.throughput_avg.toFixed(1)} items/week</strong> over the last {weeks} weeks.
-            </div>
-          )}
+          {isLoading ? <ChartSkeleton /> : <QualityChart data={qualityData} />}
+          <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-success">
+            💡 A high quality rate (&gt;80%) indicates the team spends most of its capacity on new value rather than rework. Declining trend is an early warning signal.
+          </div>
         </div>
 
+        {/* 2 — Cycle Time */}
         <div className="bg-surface border border-border rounded-xl p-5">
           <div className="flex justify-between items-start mb-4">
             <div>
@@ -114,35 +114,37 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Net Flow chart — full width */}
-      <div className="bg-surface border border-border rounded-xl p-5">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <div className="text-sm font-bold">Net Flow</div>
-            <div className="text-xs text-muted mt-0.5">Weekly arrivals vs completions — positive net means the team is shipping faster than work arrives</div>
+        {/* 3 — Throughput */}
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <div className="text-sm font-bold">Throughput</div>
+              <div className="text-xs text-muted mt-0.5">Items completed per week</div>
+            </div>
+            <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{weeks} wks</span>
           </div>
-          <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{weeks} wks</span>
+          {isLoading ? <ChartSkeleton /> : <ThroughputChart data={throughputData} weeks={weeks} />}
+          {summary && (
+            <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
+              💡 Throughput trending {summary.throughput_trend_pct >= 0 ? 'up' : 'down'} — avg <strong className="text-text">{summary.throughput_avg.toFixed(1)} items/week</strong> over the last {weeks} weeks.
+            </div>
+          )}
         </div>
-        {isLoading ? <ChartSkeleton /> : <NetFlowChart data={netFlowData} />}
-        <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-warning">
-          💡 A consistently positive net flow means the team is reducing WIP. Negative weeks signal backlog growth.
-        </div>
-      </div>
 
-      {/* Quality chart — full width */}
-      <div className="bg-surface border border-border rounded-xl p-5">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <div className="text-sm font-bold">Quality Rate</div>
-            <div className="text-xs text-muted mt-0.5">% of completed items that are NOT bugs or defects per week</div>
+        {/* 4 — Net Flow */}
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <div className="text-sm font-bold">Net Flow</div>
+              <div className="text-xs text-muted mt-0.5">Done minus started per week — positive means shipping faster than work arrives</div>
+            </div>
+            <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{weeks} wks</span>
           </div>
-          <span className="text-[10px] font-semibold bg-success/15 text-success px-2 py-1 rounded-full">{weeks} wks</span>
-        </div>
-        {isLoading ? <ChartSkeleton /> : <QualityChart data={qualityData} />}
-        <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-success">
-          💡 A high quality rate (&gt;80%) indicates the team spends most of its capacity on new value rather than rework. Declining trend is an early warning signal.
+          {isLoading ? <ChartSkeleton /> : <NetFlowChart data={netFlowData} />}
+          <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-warning">
+            💡 A consistently positive net flow means the team is reducing WIP. Negative weeks signal backlog growth.
+          </div>
         </div>
       </div>
     </div>
