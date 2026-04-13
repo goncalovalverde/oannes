@@ -28,31 +28,19 @@ export default function NetFlowChart({ data }: Props) {
   const traces: Plotly.Data[] = [
     {
       type: 'bar',
-      name: 'Arrivals',
-      x: weeks,
-      y: data.map(d => d.arrivals),
-      marker: { color: '#6366f1', opacity: 0.75 },
-    },
-    {
-      type: 'bar',
-      name: 'Completions',
-      x: weeks,
-      y: data.map(d => d.completions),
-      marker: { color: '#22c55e', opacity: 0.75 },
-    },
-    {
-      type: 'scatter',
-      mode: 'lines+markers',
       name: 'Net Flow',
       x: weeks,
       y: netValues,
-      yaxis: 'y2',
-      line: { color: '#f59e0b', width: 2 },
-      marker: { size: 5, color: netValues.map(v => (v >= 0 ? '#22c55e' : '#ef4444')) },
+      // Colour each bar: green when completions > arrivals, red otherwise
+      marker: {
+        color: netValues.map(v => (v >= 0 ? COLORS.success : COLORS.danger)),
+        opacity: 0.8,
+      },
+      hovertemplate: '%{x}<br>Net: %{y}<extra></extra>',
     },
   ]
 
-  // Linear trendline on net flow values (least squares)
+  // Linear trendline (least squares)
   const n = netValues.length
   if (n > 1) {
     const xIdx = netValues.map((_, i) => i)
@@ -66,28 +54,23 @@ export default function NetFlowChart({ data }: Props) {
     traces.push({
       type: 'scatter',
       mode: 'lines',
-      name: 'Net Trend',
+      name: 'Trend',
       x: weeks,
       y: xIdx.map(i => slope * i + intercept),
-      yaxis: 'y2',
       line: { color: COLORS.purple, dash: 'dash', width: 2 },
-      opacity: 0.8,
+      opacity: 0.85,
     })
   }
 
   const layout: Partial<Plotly.Layout> = {
     ...darkLayout,
-    barmode: 'group',
-    yaxis: { ...darkLayout.yaxis, title: { text: 'Items' } as any, tickfont: { size: 10 } },
-    yaxis2: {
-      overlaying: 'y' as const,
-      side: 'right' as const,
-      title: { text: 'Net Flow' } as any,
-      tickfont: { size: 10, color: '#f59e0b' },
+    yaxis: {
+      ...darkLayout.yaxis,
+      title: { text: 'Net Flow (done − started)' } as any,
+      tickfont: { size: 10 },
       zeroline: true,
-      zerolinecolor: '#f59e0b',
+      zerolinecolor: '#6b7280',
       zerolinewidth: 1,
-      showgrid: false,
     },
     legend: { orientation: 'h', y: -0.25 },
   }
