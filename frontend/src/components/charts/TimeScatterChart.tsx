@@ -10,9 +10,10 @@ interface Props {
   p95?: number | null
   yField: 'cycle_time_days' | 'lead_time_days'
   yLabel: string
+  expanded?: boolean
 }
 
-export default function TimeScatterChart({ data, p50, p85, p95, yField, yLabel }: Props) {
+export default function TimeScatterChart({ data, p50, p85, p95, yField, yLabel, expanded = false }: Props) {
   if (!data?.length) return <div className="h-48 flex items-center justify-center text-muted text-sm">No data</div>
 
   const types = [...new Set(data.map(d => d.item_type))]
@@ -54,7 +55,7 @@ export default function TimeScatterChart({ data, p50, p85, p95, yField, yLabel }
         data={traces}
         layout={{ ...darkLayout, yaxis: { ...darkLayout.yaxis, title: { text: 'Days', font: { color: '#64748b', size: 11 } } } } as any}
         config={plotConfig}
-        style={{ width: '100%', height: '220px' }}
+        style={{ width: '100%', height: expanded ? '400px' : '220px' }}
         useResizeHandler
       />
     </ChartErrorBoundary>

@@ -11,9 +11,10 @@ interface NetFlowPoint {
 
 interface Props {
   data: NetFlowPoint[]
+  expanded?: boolean
 }
 
-export default function NetFlowChart({ data }: Props) {
+export default function NetFlowChart({ data, expanded = false }: Props) {
   if (!data?.length) {
     return (
       <div className="h-48 flex items-center justify-center text-muted text-sm">
@@ -81,7 +82,7 @@ export default function NetFlowChart({ data }: Props) {
         data={traces}
         layout={layout as any}
         config={plotConfig}
-        style={{ width: '100%', height: '220px' }}
+        style={{ width: '100%', height: expanded ? '400px' : '220px' }}
         useResizeHandler
       />
     </ChartErrorBoundary>
