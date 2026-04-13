@@ -11,12 +11,11 @@ interface QualityPoint {
 
 interface Props {
   data: QualityPoint[]
-  expanded?: boolean
 }
 
 const TARGET_PCT = 80
 
-export default function QualityChart({ data, expanded = false }: Props) {
+export default function QualityChart({ data }: Props) {
   if (!data?.length) {
     return (
       <div className="h-48 flex items-center justify-center text-muted text-sm">
@@ -112,7 +111,7 @@ export default function QualityChart({ data, expanded = false }: Props) {
         data={traces}
         layout={layout as any}
         config={plotConfig}
-        style={{ width: '100%', height: expanded ? '400px' : '220px' }}
+        style={{ width: '100%', height: '220px' }}
         useResizeHandler
       />
     </ChartErrorBoundary>

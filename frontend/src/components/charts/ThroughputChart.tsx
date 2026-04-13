@@ -3,9 +3,9 @@ import Plot from 'react-plotly.js'
 import { darkLayout, plotConfig, COLORS, TYPE_COLORS } from './plotConfig'
 import type { ThroughputPoint } from '../../types'
 
-interface Props { data: ThroughputPoint[]; weeks: number; expanded?: boolean }
+interface Props { data: ThroughputPoint[]; weeks: number }
 
-export default function ThroughputChart({ data, weeks, expanded = false }: Props) {
+export default function ThroughputChart({ data, weeks }: Props) {
   if (!data?.length) return <div className="h-48 flex items-center justify-center text-muted text-sm">No data</div>
 
   const types = Object.keys(data[0]).filter(k => k !== 'week' && k !== 'Total')
@@ -45,7 +45,7 @@ export default function ThroughputChart({ data, weeks, expanded = false }: Props
         data={traces}
         layout={{ ...darkLayout, barmode: 'stack' } as any}
         config={plotConfig}
-        style={{ width: '100%', height: expanded ? '400px' : '220px' }}
+        style={{ width: '100%', height: '220px' }}
         useResizeHandler
       />
     </ChartErrorBoundary>
