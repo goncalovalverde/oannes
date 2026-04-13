@@ -5,6 +5,37 @@ from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Granularity helpers
+# ---------------------------------------------------------------------------
+
+_GRANULARITY_MAP: dict[str, str] = {
+    "week":   "W-MON",
+    "biweek": "2W-MON",
+    "month":  "MS",
+}
+
+_VALID_GRANULARITIES = frozenset(_GRANULARITY_MAP.keys())
+
+
+def _resolve_freq(granularity: str) -> str:
+    """Return the pandas frequency string for a named granularity."""
+    if granularity not in _VALID_GRANULARITIES:
+        raise ValueError(
+            f"Invalid granularity {granularity!r}. "
+            f"Must be one of: {sorted(_VALID_GRANULARITIES)}"
+        )
+    return _GRANULARITY_MAP[granularity]
+
+
+def _next_period(date: pd.Timestamp, granularity: str) -> pd.Timestamp:
+    """Return the start of the next bucket after ``date``."""
+    if granularity == "month":
+        return date + pd.DateOffset(months=1)
+    elif granularity == "biweek":
+        return date + pd.Timedelta(weeks=2)
+    else:
+        return date + pd.Timedelta(weeks=1)
 
 def _naive(series: pd.Series) -> pd.Series:
     """Convert a tz-aware datetime Series to UTC-naive. No-op if already naive."""
@@ -49,10 +80,12 @@ def _now() -> pd.Timestamp:
     return pd.Timestamp(datetime.now()).normalize()
 
 
-def throughput(df: pd.DataFrame, done_col: str, weeks: int = 12) -> pd.DataFrame:
-    """Weekly throughput by item type."""
+def throughput(df: pd.DataFrame, done_col: str, weeks: int = 12, granularity: str = "week") -> pd.DataFrame:
+    """Throughput by item type, bucketed by granularity."""
     if df.empty or done_col not in df.columns:
         return pd.DataFrame()
+
+    freq = _resolve_freq(granularity)
 
     completed = df[df[done_col].notna()].copy()
     if completed.empty:
@@ -63,26 +96,24 @@ def throughput(df: pd.DataFrame, done_col: str, weeks: int = 12) -> pd.DataFrame
     end = _now()
     start = end - pd.Timedelta(weeks=weeks)
 
-    # Filter to the requested window before pivoting
     completed = completed[(completed[done_col] >= start) & (completed[done_col] <= end)]
-    date_range = pd.date_range(start=start, end=end, freq="W-MON")
+    date_range = pd.date_range(start=start, end=end, freq=freq)
     if completed.empty:
         return pd.DataFrame({"Total": 0}, index=date_range)
 
-    # Use resample so the index uses the same Monday anchor as date_range(freq="W-MON")
     completed = completed.set_index(done_col)
     if "item_type" in completed.columns:
-        weekly = (
-            completed.groupby(["item_type", pd.Grouper(freq="W-MON")])
+        grouped = (
+            completed.groupby(["item_type", pd.Grouper(freq=freq)])
             .size()
             .unstack(level=0, fill_value=0)
         )
-        weekly.columns.name = None
-        weekly["Total"] = weekly.sum(axis=1)
+        grouped.columns.name = None
+        grouped["Total"] = grouped.sum(axis=1)
     else:
-        weekly = completed.resample("W-MON").size().to_frame("Total")
+        grouped = completed.resample(freq).size().to_frame("Total")
 
-    pivot = weekly.reindex(date_range, fill_value=0)
+    pivot = grouped.reindex(date_range, fill_value=0)
     return pivot
 
 
@@ -281,14 +312,16 @@ def quality_rate(
     done_col: str,
     weeks: int = 12,
     bug_types: frozenset | set | None = None,
+    granularity: str = "week",
 ) -> pd.DataFrame:
-    """Weekly percentage of completed items that are NOT bugs/defects.
+    """Percentage of completed items that are NOT bugs/defects, bucketed by granularity.
 
     Returns a DataFrame with columns: week, total, bugs, quality_pct.
-    Rows span the full ``weeks`` window even if a week has zero completions.
     """
     if df.empty or done_col not in df.columns:
         return pd.DataFrame()
+
+    freq = _resolve_freq(granularity)
 
     if bug_types is None:
         bug_types = _DEFAULT_BUG_TYPES
@@ -299,7 +332,7 @@ def quality_rate(
 
     end = _now()
     start = end - pd.Timedelta(weeks=weeks)
-    date_range = pd.date_range(start=start, end=end, freq="W-MON")
+    date_range = pd.date_range(start=start, end=end, freq=freq)
 
     completed = df[df[done_col].notna() & (df[done_col] >= start) & (df[done_col] <= end)].copy()
     if "item_type" not in completed.columns:
@@ -309,7 +342,7 @@ def quality_rate(
 
     results = []
     for date in date_range:
-        next_date = date + pd.Timedelta(weeks=1)
+        next_date = _next_period(date, granularity)
         week_mask = (completed[done_col] >= date) & (completed[done_col] < next_date)
         week_df = completed[week_mask]
         total = len(week_df)
@@ -320,13 +353,15 @@ def quality_rate(
     return pd.DataFrame(results)
 
 
-def net_flow(df: pd.DataFrame, start_col: str, done_col: str, weeks: int = 12) -> pd.DataFrame:
-    """Weekly arrivals minus completions."""
+def net_flow(df: pd.DataFrame, start_col: str, done_col: str, weeks: int = 12, granularity: str = "week") -> pd.DataFrame:
+    """Arrivals minus completions, bucketed by granularity."""
     if df.empty:
         return pd.DataFrame()
 
     if start_col not in df.columns or done_col not in df.columns:
         return pd.DataFrame()
+
+    freq = _resolve_freq(granularity)
 
     df = df.copy()
     df[start_col] = _naive(df[start_col])
@@ -334,11 +369,11 @@ def net_flow(df: pd.DataFrame, start_col: str, done_col: str, weeks: int = 12) -
 
     end = _now()
     start = end - pd.Timedelta(weeks=weeks)
-    date_range = pd.date_range(start=start, end=end, freq="W-MON")
+    date_range = pd.date_range(start=start, end=end, freq=freq)
 
     results = []
     for date in date_range:
-        next_date = date + pd.Timedelta(weeks=1)
+        next_date = _next_period(date, granularity)
         arrivals    = len(df[df[start_col].notna() & (df[start_col] >= date) & (df[start_col] < next_date)])
         completions = len(df[df[done_col].notna()  & (df[done_col]  >= date) & (df[done_col]  < next_date)])
         results.append({"week": date, "arrivals": arrivals, "completions": completions, "net": completions - arrivals})

@@ -1,9 +1,10 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import client from '../client'
 import type { MetricsSummary, ThroughputPoint, ScatterPoint, WipPoint, CfdPoint, AgingItem, MonteCarloResult } from '../../types'
+import type { Granularity } from '../../store/filterStore'
 
-function metricsParams(weeks: number, itemType: string) {
-  return { params: { weeks, item_type: itemType } }
+function metricsParams(weeks: number, itemType: string, granularity?: Granularity) {
+  return { params: { weeks, item_type: itemType, ...(granularity ? { granularity } : {}) } }
 }
 
 export function useMetricsSummary(projectId: number | null, weeks: number, itemType: string) {
@@ -14,10 +15,10 @@ export function useMetricsSummary(projectId: number | null, weeks: number, itemT
   })
 }
 
-export function useThroughput(projectId: number | null, weeks: number, itemType: string) {
+export function useThroughput(projectId: number | null, weeks: number, itemType: string, granularity: Granularity = 'week') {
   return useQuery<ThroughputPoint[]>({
-    queryKey: ['metrics', projectId, 'throughput', weeks, itemType],
-    queryFn: () => client.get(`/metrics/${projectId}/throughput`, metricsParams(weeks, itemType)).then(r => r.data.data),
+    queryKey: ['metrics', projectId, 'throughput', weeks, itemType, granularity],
+    queryFn: () => client.get(`/metrics/${projectId}/throughput`, metricsParams(weeks, itemType, granularity)).then(r => r.data.data),
     enabled: projectId != null,
   })
 }
@@ -84,23 +85,23 @@ export function useMonteCarlo() {
   })
 }
 
-export function useNetFlow(projectId: number | null, weeks: number, itemType: string) {
+export function useNetFlow(projectId: number | null, weeks: number, itemType: string, granularity: Granularity = 'week') {
   return useQuery<{ week: string; arrivals: number; completions: number; net: number }[]>({
-    queryKey: ['metrics', projectId, 'net-flow', weeks, itemType],
+    queryKey: ['metrics', projectId, 'net-flow', weeks, itemType, granularity],
     queryFn: () =>
       client
-        .get(`/metrics/${projectId}/net-flow`, { params: { weeks, item_type: itemType } })
+        .get(`/metrics/${projectId}/net-flow`, { params: { weeks, item_type: itemType, granularity } })
         .then(r => r.data.data),
     enabled: projectId != null,
   })
 }
 
-export function useQualityRate(projectId: number | null, weeks: number, itemType: string) {
+export function useQualityRate(projectId: number | null, weeks: number, itemType: string, granularity: Granularity = 'week') {
   return useQuery<{ week: string; total: number; bugs: number; quality_pct: number }[]>({
-    queryKey: ['metrics', projectId, 'quality-rate', weeks, itemType],
+    queryKey: ['metrics', projectId, 'quality-rate', weeks, itemType, granularity],
     queryFn: () =>
       client
-        .get(`/metrics/${projectId}/quality-rate`, { params: { weeks, item_type: itemType } })
+        .get(`/metrics/${projectId}/quality-rate`, { params: { weeks, item_type: itemType, granularity } })
         .then(r => r.data.data),
     enabled: projectId != null,
   })

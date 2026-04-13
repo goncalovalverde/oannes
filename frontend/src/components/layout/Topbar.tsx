@@ -10,8 +10,14 @@ const WEEK_OPTIONS = [
   { label: 'All time',      value: 520 },
 ]
 
+const GRANULARITY_OPTIONS = [
+  { label: 'Weekly',     value: 'week'   },
+  { label: 'Bi-weekly',  value: 'biweek' },
+  { label: 'Monthly',    value: 'month'  },
+] as const
+
 export default function Topbar({ title }: Props) {
-  const { activeProjectId, weeks, itemType, setWeeks, setItemType } = useFilterStore()
+  const { activeProjectId, weeks, itemType, granularity, setWeeks, setItemType, setGranularity } = useFilterStore()
   const { data: types = [] } = useItemTypes(activeProjectId)
 
   return (
@@ -24,6 +30,15 @@ export default function Topbar({ title }: Props) {
           className="bg-surface2 border border-border text-xs text-text rounded-full px-3 py-1.5 focus:outline-none focus:border-primary cursor-pointer"
         >
           {WEEK_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <select
+          value={granularity}
+          onChange={e => setGranularity(e.target.value as 'week' | 'biweek' | 'month')}
+          className="bg-surface2 border border-border text-xs text-text rounded-full px-3 py-1.5 focus:outline-none focus:border-primary cursor-pointer"
+        >
+          {GRANULARITY_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>

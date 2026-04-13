@@ -599,3 +599,54 @@ class TestQualityRate:
         assert r4.status_code == 200
         assert r12.status_code == 200
         assert len(r4.json()["data"]) <= len(r12.json()["data"])
+
+
+class TestGranularityParam:
+    """API endpoints must honour the granularity query param."""
+
+    def test_throughput_week_granularity_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/throughput?granularity=week")
+        assert r.status_code == 200
+
+    def test_throughput_biweek_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/throughput?granularity=biweek")
+        assert r.status_code == 200
+
+    def test_throughput_month_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/throughput?granularity=month")
+        assert r.status_code == 200
+
+    def test_throughput_invalid_granularity_returns_422(self, client, db):
+        pid = _create_project(client)
+        r = client.get(f"/api/metrics/{pid}/throughput?granularity=quarterly")
+        assert r.status_code == 422
+
+    def test_net_flow_biweek_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/net-flow?granularity=biweek")
+        assert r.status_code == 200
+
+    def test_net_flow_month_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/net-flow?granularity=month")
+        assert r.status_code == 200
+
+    def test_quality_rate_biweek_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/quality-rate?granularity=biweek")
+        assert r.status_code == 200
+
+    def test_quality_rate_month_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/quality-rate?granularity=month")
+        assert r.status_code == 200

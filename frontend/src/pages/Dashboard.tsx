@@ -13,14 +13,14 @@ import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { activeProjectId, weeks, itemType } = useFilterStore()
+  const { activeProjectId, weeks, itemType, granularity } = useFilterStore()
   const { data: projects = [] } = useProjects()
 
   const { data: summary, isLoading } = useMetricsSummary(activeProjectId, weeks, itemType)
-  const { data: throughputData = [] } = useThroughput(activeProjectId, weeks, itemType)
+  const { data: throughputData = [] } = useThroughput(activeProjectId, weeks, itemType, granularity)
   const { data: cycleData } = useCycleTime(activeProjectId, weeks, itemType)
-  const { data: netFlowData = [] } = useNetFlow(activeProjectId, weeks, itemType)
-  const { data: qualityData = [] } = useQualityRate(activeProjectId, weeks, itemType)
+  const { data: netFlowData = [] } = useNetFlow(activeProjectId, weeks, itemType, granularity)
+  const { data: qualityData = [] } = useQualityRate(activeProjectId, weeks, itemType, granularity)
 
   if (!activeProjectId || projects.length === 0) {
     return (

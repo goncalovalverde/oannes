@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Literal
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 import pandas as pd
@@ -104,6 +104,7 @@ def get_throughput(
     project_id: int,
     weeks: int = Query(12),
     item_type: str = Query("all"),
+    granularity: Literal["week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db)
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -123,7 +124,7 @@ def get_throughput(
     if done_col not in df.columns:
         return {"data": [], "avg": 0, "trend_pct": 0}
 
-    tp_df = calc_throughput(df, done_col=done_col, weeks=weeks)
+    tp_df = calc_throughput(df, done_col=done_col, weeks=weeks, granularity=granularity)
     if tp_df.empty:
         return {"data": [], "avg": 0, "trend_pct": 0}
 
@@ -367,6 +368,7 @@ def get_net_flow(
     project_id: int,
     weeks: int = Query(12),
     item_type: str = Query("all"),
+    granularity: Literal["week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -384,7 +386,7 @@ def get_net_flow(
     start_col = next((s.display_name for s in steps if s.stage in ("start", "in_flight")), steps[0].display_name)
     done_col  = next((s.display_name for s in reversed(steps) if s.stage == "done"), steps[-1].display_name)
 
-    result_df = calc_net_flow(df, start_col, done_col, weeks)
+    result_df = calc_net_flow(df, start_col, done_col, weeks, granularity=granularity)
     if result_df.empty:
         return {"data": []}
 
@@ -398,9 +400,10 @@ def get_quality_rate(
     project_id: int,
     weeks: int = Query(12),
     item_type: str = Query("all"),
+    granularity: Literal["week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db),
 ):
-    """Weekly percentage of completed items that are NOT bugs/defects."""
+    """Percentage of completed items that are NOT bugs/defects, bucketed by granularity."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -416,7 +419,7 @@ def get_quality_rate(
     done_steps = [s for s in steps if s.stage == "done"]
     done_col = done_steps[-1].display_name if done_steps else steps[-1].display_name
 
-    result_df = calc_quality_rate(df, done_col, weeks)
+    result_df = calc_quality_rate(df, done_col, weeks, granularity=granularity)
     if result_df.empty:
         return {"data": []}
 
@@ -568,7 +571,7 @@ def run_monte_carlo(data: MonteCarloRequest, db: Session = Depends(get_db)):
 
     from calculator.monte_carlo import simulate_when_done, simulate_how_many
 
-    tp = get_throughput(data.project_id, data.weeks_history, "all", db)
+    tp = get_throughput(data.project_id, data.weeks_history, "all", granularity="week", db=db)
     throughput_series = [p["total"] for p in tp.get("data", []) if p["total"] > 0]
 
     if not throughput_series:

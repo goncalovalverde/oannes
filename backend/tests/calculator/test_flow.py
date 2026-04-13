@@ -461,3 +461,120 @@ class TestQualityRate:
         result_4 = quality_rate(df, "Done", weeks=4)
         # Only the recent Story should be in a 4-week window
         assert result_4[result_4["total"] > 0]["bugs"].sum() == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: granularity parameter
+# ---------------------------------------------------------------------------
+
+class TestGranularity:
+    """Throughput, net_flow, and quality_rate must honour the granularity param."""
+
+    def _make_spread_df(self, weeks: int = 26) -> pd.DataFrame:
+        """Items spread evenly over the given number of weeks."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        rows = []
+        for i in range(weeks):
+            done_at = now - timedelta(weeks=i, days=1)
+            start_at = done_at - timedelta(days=3)
+            rows.append({
+                "item_type": "Story",
+                "In Progress": pd.Timestamp(start_at),
+                "Done": pd.Timestamp(done_at),
+            })
+        return pd.DataFrame(rows)
+
+    # -- throughput -----------------------------------------------------------
+
+    def test_throughput_week_granularity_produces_weekly_buckets(self):
+        from calculator.flow import throughput
+        df = self._make_spread_df(24)
+        result = throughput(df, "Done", weeks=24, granularity="week")
+        assert not result.empty
+        # Weekly index: consecutive rows differ by 7 days
+        diffs = result.index.to_series().diff().dropna()
+        assert all(d == pd.Timedelta(weeks=1) for d in diffs)
+
+    def test_throughput_biweek_granularity_produces_biweekly_buckets(self):
+        from calculator.flow import throughput
+        df = self._make_spread_df(24)
+        result = throughput(df, "Done", weeks=24, granularity="biweek")
+        assert not result.empty
+        diffs = result.index.to_series().diff().dropna()
+        assert all(d == pd.Timedelta(weeks=2) for d in diffs)
+
+    def test_throughput_month_granularity_produces_fewer_buckets_than_weekly(self):
+        from calculator.flow import throughput
+        df = self._make_spread_df(24)
+        weekly  = throughput(df, "Done", weeks=24, granularity="week")
+        monthly = throughput(df, "Done", weeks=24, granularity="month")
+        assert len(monthly) < len(weekly)
+
+    def test_throughput_defaults_to_week_granularity(self):
+        from calculator.flow import throughput
+        df = self._make_spread_df(12)
+        default = throughput(df, "Done", weeks=12)
+        explicit = throughput(df, "Done", weeks=12, granularity="week")
+        assert len(default) == len(explicit)
+
+    def test_throughput_invalid_granularity_raises_value_error(self):
+        from calculator.flow import throughput
+        import pytest
+        df = self._make_spread_df(4)
+        with pytest.raises(ValueError, match="granularity"):
+            throughput(df, "Done", weeks=4, granularity="quarterly")
+
+    # -- net_flow -------------------------------------------------------------
+
+    def test_net_flow_biweek_produces_fewer_rows_than_weekly(self):
+        from calculator.flow import net_flow
+        df = self._make_spread_df(24)
+        weekly  = net_flow(df, "In Progress", "Done", weeks=24, granularity="week")
+        biweekly = net_flow(df, "In Progress", "Done", weeks=24, granularity="biweek")
+        assert len(biweekly) < len(weekly)
+
+    def test_net_flow_month_produces_fewer_rows_than_weekly(self):
+        from calculator.flow import net_flow
+        df = self._make_spread_df(24)
+        weekly  = net_flow(df, "In Progress", "Done", weeks=24, granularity="week")
+        monthly = net_flow(df, "In Progress", "Done", weeks=24, granularity="month")
+        assert len(monthly) < len(weekly)
+
+    def test_net_flow_defaults_to_week_granularity(self):
+        from calculator.flow import net_flow
+        df = self._make_spread_df(12)
+        default  = net_flow(df, "In Progress", "Done", weeks=12)
+        explicit = net_flow(df, "In Progress", "Done", weeks=12, granularity="week")
+        assert len(default) == len(explicit)
+
+    def test_net_flow_biweek_total_completions_equals_weekly_total(self):
+        """Aggregating by biweek must not lose completions."""
+        from calculator.flow import net_flow
+        df = self._make_spread_df(12)
+        weekly   = net_flow(df, "In Progress", "Done", weeks=12, granularity="week")
+        biweekly = net_flow(df, "In Progress", "Done", weeks=12, granularity="biweek")
+        assert weekly["completions"].sum() == biweekly["completions"].sum()
+
+    # -- quality_rate ---------------------------------------------------------
+
+    def test_quality_rate_biweek_produces_fewer_rows_than_weekly(self):
+        from calculator.flow import quality_rate
+        df = self._make_spread_df(24)
+        weekly   = quality_rate(df, "Done", weeks=24, granularity="week")
+        biweekly = quality_rate(df, "Done", weeks=24, granularity="biweek")
+        assert len(biweekly) < len(weekly)
+
+    def test_quality_rate_month_produces_fewer_rows_than_weekly(self):
+        from calculator.flow import quality_rate
+        df = self._make_spread_df(24)
+        weekly  = quality_rate(df, "Done", weeks=24, granularity="week")
+        monthly = quality_rate(df, "Done", weeks=24, granularity="month")
+        assert len(monthly) < len(weekly)
+
+    def test_quality_rate_defaults_to_week_granularity(self):
+        from calculator.flow import quality_rate
+        df = self._make_spread_df(12)
+        default  = quality_rate(df, "Done", weeks=12)
+        explicit = quality_rate(df, "Done", weeks=12, granularity="week")
+        assert len(default) == len(explicit)
