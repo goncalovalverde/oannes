@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useFilterStore } from '../store/filterStore'
-import { useMetricsSummary, useThroughput, useCycleTime, useNetFlow } from '../api/hooks/useMetrics'
+import { useMetricsSummary, useThroughput, useCycleTime, useNetFlow, useQualityRate } from '../api/hooks/useMetrics'
 import { useProjects } from '../api/hooks/useProjects'
 import KpiCard from '../components/ui/KpiCard'
 import AlertBanner from '../components/ui/AlertBanner'
@@ -8,6 +8,7 @@ import EmptyState from '../components/ui/EmptyState'
 import ThroughputChart from '../components/charts/ThroughputChart'
 import TimeScatterChart from '../components/charts/TimeScatterChart'
 import NetFlowChart from '../components/charts/NetFlowChart'
+import QualityChart from '../components/charts/QualityChart'
 import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
 
 export default function Dashboard() {
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const { data: throughputData = [] } = useThroughput(activeProjectId, weeks, itemType)
   const { data: cycleData } = useCycleTime(activeProjectId, weeks, itemType)
   const { data: netFlowData = [] } = useNetFlow(activeProjectId, weeks, itemType)
+  const { data: qualityData = [] } = useQualityRate(activeProjectId, weeks, itemType)
 
   if (!activeProjectId || projects.length === 0) {
     return (
@@ -126,6 +128,21 @@ export default function Dashboard() {
         {isLoading ? <ChartSkeleton /> : <NetFlowChart data={netFlowData} />}
         <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-warning">
           💡 A consistently positive net flow means the team is reducing WIP. Negative weeks signal backlog growth.
+        </div>
+      </div>
+
+      {/* Quality chart — full width */}
+      <div className="bg-surface border border-border rounded-xl p-5">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <div className="text-sm font-bold">Quality Rate</div>
+            <div className="text-xs text-muted mt-0.5">% of completed items that are NOT bugs or defects per week</div>
+          </div>
+          <span className="text-[10px] font-semibold bg-success/15 text-success px-2 py-1 rounded-full">{weeks} wks</span>
+        </div>
+        {isLoading ? <ChartSkeleton /> : <QualityChart data={qualityData} />}
+        <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-success">
+          💡 A high quality rate (&gt;80%) indicates the team spends most of its capacity on new value rather than rework. Declining trend is an early warning signal.
         </div>
       </div>
     </div>

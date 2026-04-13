@@ -16,6 +16,7 @@ from calculator.flow import (
     wip_over_time,
     flow_efficiency as calc_flow_efficiency,
     net_flow as calc_net_flow,
+    quality_rate as calc_quality_rate,
 )
 
 router = APIRouter()
@@ -390,6 +391,37 @@ def get_net_flow(
     records = result_df.copy()
     records["week"] = records["week"].dt.strftime("%Y-%m-%d")
     return {"data": records.to_dict(orient="records")}
+
+
+@router.get("/{project_id}/quality-rate")
+def get_quality_rate(
+    project_id: int,
+    weeks: int = Query(12),
+    item_type: str = Query("all"),
+    db: Session = Depends(get_db),
+):
+    """Weekly percentage of completed items that are NOT bugs/defects."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    df = get_items_df(project_id, weeks, item_type, db)
+    if df.empty:
+        return {"data": []}
+
+    steps = sorted(project.workflow_steps, key=lambda s: s.position)
+    if not steps:
+        return {"data": []}
+
+    done_steps = [s for s in steps if s.stage == "done"]
+    done_col = done_steps[-1].display_name if done_steps else steps[-1].display_name
+
+    result_df = calc_quality_rate(df, done_col, weeks)
+    if result_df.empty:
+        return {"data": []}
+
+    result_df["week"] = result_df["week"].dt.strftime("%Y-%m-%d")
+    return {"data": result_df.to_dict(orient="records")}
 
 
 @router.get("/{project_id}/summary", response_model=MetricsSummary)

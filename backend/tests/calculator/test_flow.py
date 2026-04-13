@@ -337,3 +337,127 @@ class TestComputeCycleAndLeadNoMutation:
         compute_cycle_and_lead(subset, STEPS)
         assert set(subset.columns) == cols_before
 
+
+
+# ---------------------------------------------------------------------------
+# Tests: quality_rate
+# ---------------------------------------------------------------------------
+
+class TestQualityRate:
+    """Unit tests for quality_rate() — % of completed items that are NOT bugs/defects."""
+
+    from calculator.flow import _now as _flow_now
+
+    def _make_quality_df(self, types: list, days_ago_range: int = 7) -> pd.DataFrame:
+        """Build a DataFrame with item_type and a Done timestamp in the last week."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        rows = []
+        for i, t in enumerate(types):
+            done_at = now - timedelta(days=i % days_ago_range)
+            rows.append({"item_type": t, "Done": pd.Timestamp(done_at)})
+        return pd.DataFrame(rows)
+
+    def test_empty_df_returns_empty(self):
+        from calculator.flow import quality_rate
+        result = quality_rate(pd.DataFrame(), "Done", weeks=12)
+        assert result.empty
+
+    def test_missing_done_col_returns_empty(self):
+        from calculator.flow import quality_rate
+        df = pd.DataFrame({"item_type": ["Story"], "NotDone": [pd.Timestamp("2026-01-01")]})
+        result = quality_rate(df, "Done", weeks=12)
+        assert result.empty
+
+    def test_all_features_returns_100_pct(self):
+        from calculator.flow import quality_rate
+        df = self._make_quality_df(["Story", "Feature", "Task", "Epic"])
+        result = quality_rate(df, "Done", weeks=12)
+        assert not result.empty
+        completed_rows = result[result["total"] > 0]
+        assert all(completed_rows["quality_pct"] == 100.0)
+
+    def test_all_bugs_returns_0_pct(self):
+        from calculator.flow import quality_rate
+        df = self._make_quality_df(["Bug", "Bug", "Defect", "Bug"])
+        result = quality_rate(df, "Done", weeks=12)
+        completed_rows = result[result["total"] > 0]
+        assert all(completed_rows["quality_pct"] == 0.0)
+
+    def test_mixed_types_returns_correct_pct(self):
+        """4 Stories + 1 Bug in same week → 80% quality."""
+        from calculator.flow import quality_rate
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        # Put all in the same week
+        done_at = now - timedelta(days=1)
+        rows = [{"item_type": t, "Done": pd.Timestamp(done_at)} for t in
+                ["Story", "Story", "Story", "Story", "Bug"]]
+        df = pd.DataFrame(rows)
+        result = quality_rate(df, "Done", weeks=12)
+        completed_rows = result[result["total"] > 0]
+        assert len(completed_rows) == 1
+        assert completed_rows.iloc[0]["total"] == 5
+        assert completed_rows.iloc[0]["bugs"] == 1
+        assert abs(completed_rows.iloc[0]["quality_pct"] - 80.0) < 0.01
+
+    def test_case_insensitive_bug_matching(self):
+        """'bug', 'BUG', 'Bug' should all be treated as defects."""
+        from calculator.flow import quality_rate
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        done_at = now - timedelta(days=1)
+        df = pd.DataFrame([
+            {"item_type": "bug",    "Done": pd.Timestamp(done_at)},
+            {"item_type": "BUG",    "Done": pd.Timestamp(done_at)},
+            {"item_type": "Bug",    "Done": pd.Timestamp(done_at)},
+            {"item_type": "DEFECT", "Done": pd.Timestamp(done_at)},
+            {"item_type": "Story",  "Done": pd.Timestamp(done_at)},
+        ])
+        result = quality_rate(df, "Done", weeks=12)
+        completed_rows = result[result["total"] > 0]
+        assert completed_rows.iloc[0]["bugs"] == 4
+        assert abs(completed_rows.iloc[0]["quality_pct"] - 20.0) < 0.01
+
+    def test_custom_bug_types(self):
+        """Caller can supply custom bug_types set."""
+        from calculator.flow import quality_rate
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        done_at = now - timedelta(days=1)
+        df = pd.DataFrame([
+            {"item_type": "Incident", "Done": pd.Timestamp(done_at)},
+            {"item_type": "Story",    "Done": pd.Timestamp(done_at)},
+        ])
+        result = quality_rate(df, "Done", weeks=12, bug_types={"incident"})
+        completed_rows = result[result["total"] > 0]
+        assert completed_rows.iloc[0]["bugs"] == 1
+        assert abs(completed_rows.iloc[0]["quality_pct"] - 50.0) < 0.01
+
+    def test_result_has_required_columns(self):
+        from calculator.flow import quality_rate
+        df = self._make_quality_df(["Story", "Bug"])
+        result = quality_rate(df, "Done", weeks=12)
+        assert set(result.columns) >= {"week", "total", "bugs", "quality_pct"}
+
+    def test_quality_pct_bounded_0_to_100(self):
+        from calculator.flow import quality_rate
+        df = self._make_quality_df(["Story", "Bug", "Story", "Bug"])
+        result = quality_rate(df, "Done", weeks=12)
+        assert (result["quality_pct"] >= 0).all()
+        assert (result["quality_pct"] <= 100).all()
+
+    def test_weeks_param_limits_window(self):
+        """Items outside the window must not appear."""
+        from calculator.flow import quality_rate
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        old_done = now - timedelta(weeks=20)
+        recent_done = now - timedelta(days=3)
+        df = pd.DataFrame([
+            {"item_type": "Bug",   "Done": pd.Timestamp(old_done)},
+            {"item_type": "Story", "Done": pd.Timestamp(recent_done)},
+        ])
+        result_4 = quality_rate(df, "Done", weeks=4)
+        # Only the recent Story should be in a 4-week window
+        assert result_4[result_4["total"] > 0]["bugs"].sum() == 0

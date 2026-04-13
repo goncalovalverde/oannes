@@ -273,6 +273,53 @@ def flow_efficiency(df: pd.DataFrame, workflow_steps: list) -> float:
     return round(min(total_active / total_lead, 1.0), 3) if total_lead > 0 else 0.0
 
 
+_DEFAULT_BUG_TYPES = frozenset({"bug", "defect", "incident", "hotfix"})
+
+
+def quality_rate(
+    df: pd.DataFrame,
+    done_col: str,
+    weeks: int = 12,
+    bug_types: frozenset | set | None = None,
+) -> pd.DataFrame:
+    """Weekly percentage of completed items that are NOT bugs/defects.
+
+    Returns a DataFrame with columns: week, total, bugs, quality_pct.
+    Rows span the full ``weeks`` window even if a week has zero completions.
+    """
+    if df.empty or done_col not in df.columns:
+        return pd.DataFrame()
+
+    if bug_types is None:
+        bug_types = _DEFAULT_BUG_TYPES
+    bug_types_lower = frozenset(b.lower() for b in bug_types)
+
+    df = df.copy()
+    df[done_col] = _naive(df[done_col])
+
+    end = _now()
+    start = end - pd.Timedelta(weeks=weeks)
+    date_range = pd.date_range(start=start, end=end, freq="W-MON")
+
+    completed = df[df[done_col].notna() & (df[done_col] >= start) & (df[done_col] <= end)].copy()
+    if "item_type" not in completed.columns:
+        completed["item_type"] = "Unknown"
+
+    completed["_is_bug"] = completed["item_type"].str.lower().isin(bug_types_lower)
+
+    results = []
+    for date in date_range:
+        next_date = date + pd.Timedelta(weeks=1)
+        week_mask = (completed[done_col] >= date) & (completed[done_col] < next_date)
+        week_df = completed[week_mask]
+        total = len(week_df)
+        bugs  = int(week_df["_is_bug"].sum())
+        quality_pct = round((total - bugs) / total * 100, 1) if total > 0 else 0.0
+        results.append({"week": date, "total": total, "bugs": bugs, "quality_pct": quality_pct})
+
+    return pd.DataFrame(results)
+
+
 def net_flow(df: pd.DataFrame, start_col: str, done_col: str, weeks: int = 12) -> pd.DataFrame:
     """Weekly arrivals minus completions."""
     if df.empty:

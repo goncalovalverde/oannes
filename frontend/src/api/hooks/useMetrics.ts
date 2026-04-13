@@ -94,3 +94,14 @@ export function useNetFlow(projectId: number | null, weeks: number, itemType: st
     enabled: projectId != null,
   })
 }
+
+export function useQualityRate(projectId: number | null, weeks: number, itemType: string) {
+  return useQuery<{ week: string; total: number; bugs: number; quality_pct: number }[]>({
+    queryKey: ['metrics', projectId, 'quality-rate', weeks, itemType],
+    queryFn: () =>
+      client
+        .get(`/metrics/${projectId}/quality-rate`, { params: { weeks, item_type: itemType } })
+        .then(r => r.data.data),
+    enabled: projectId != null,
+  })
+}
