@@ -99,7 +99,7 @@ def throughput(df: pd.DataFrame, done_col: str, weeks: int = 12, granularity: st
     end = _now()
     start = end - pd.Timedelta(weeks=weeks)
 
-    completed = completed[(completed[done_col] >= start) & (completed[done_col] <= end)]
+    completed = completed[(completed[done_col] >= start) & (completed[done_col] < end + pd.Timedelta(days=1))]
     date_range = pd.date_range(start=start, end=end, freq=freq)
     if completed.empty:
         return pd.DataFrame({"Total": 0}, index=date_range)
@@ -337,7 +337,7 @@ def quality_rate(
     start = end - pd.Timedelta(weeks=weeks)
     date_range = pd.date_range(start=start, end=end, freq=freq)
 
-    completed = df[df[done_col].notna() & (df[done_col] >= start) & (df[done_col] <= end)].copy()
+    completed = df[df[done_col].notna() & (df[done_col] >= start) & (df[done_col] < end + pd.Timedelta(days=1))].copy()
     if "item_type" not in completed.columns:
         completed["item_type"] = "Unknown"
 

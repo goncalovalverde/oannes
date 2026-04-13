@@ -12,7 +12,7 @@ export default function MonteCarlo() {
   const [backlogSize, setBacklogSize] = useState(50)
   const [targetWeeks, setTargetWeeks] = useState(8)
   const [simulations] = useState(10000)
-  const { mutate: runSim, data: result, isPending } = useMonteCarlo()
+  const { mutate: runSim, data: result, isPending, isError, error } = useMonteCarlo()
 
   if (!activeProjectId) return <EmptyState icon="◎" title="No project selected" description="Select a project from the sidebar." />
 
@@ -75,6 +75,13 @@ export default function MonteCarlo() {
         >
           {isPending ? 'Simulating 10,000 runs…' : '▶ Run Forecast'}
         </button>
+
+        {isError && (
+          <div className="mt-3 px-4 py-3 bg-danger/10 border border-danger/30 rounded-lg text-sm text-danger flex items-start gap-2">
+            <span className="mt-0.5 shrink-0">⚠️</span>
+            <span>{(error as any)?.response?.data?.detail ?? error?.message ?? 'Simulation failed. Please check your project has completed items.'}</span>
+          </div>
+        )}
       </div>
 
       {result && (
