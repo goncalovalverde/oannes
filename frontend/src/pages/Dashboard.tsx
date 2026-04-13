@@ -16,11 +16,11 @@ export default function Dashboard() {
   const { activeProjectId, weeks, itemType, granularity } = useFilterStore()
   const { data: projects = [] } = useProjects()
 
-  const { data: summary, isLoading } = useMetricsSummary(activeProjectId, weeks, itemType)
-  const { data: throughputData = [] } = useThroughput(activeProjectId, weeks, itemType, granularity)
-  const { data: cycleData } = useCycleTime(activeProjectId, weeks, itemType)
-  const { data: netFlowData = [] } = useNetFlow(activeProjectId, weeks, itemType, granularity)
-  const { data: qualityData = [] } = useQualityRate(activeProjectId, weeks, itemType, granularity)
+  const { data: summary } = useMetricsSummary(activeProjectId, weeks, itemType)
+  const { data: throughputData = [], isFetching: throughputFetching } = useThroughput(activeProjectId, weeks, itemType, granularity)
+  const { data: cycleData, isLoading: cycleLoading } = useCycleTime(activeProjectId, weeks, itemType)
+  const { data: netFlowData = [], isFetching: netFlowFetching } = useNetFlow(activeProjectId, weeks, itemType, granularity)
+  const { data: qualityData = [], isFetching: qualityFetching } = useQualityRate(activeProjectId, weeks, itemType, granularity)
 
   if (!activeProjectId || projects.length === 0) {
     return (
@@ -81,7 +81,7 @@ export default function Dashboard() {
             </div>
             <span className="text-[10px] font-semibold bg-success/15 text-success px-2 py-1 rounded-full">{weeks} wks</span>
           </div>
-          {isLoading ? <ChartSkeleton /> : <QualityChart data={qualityData} />}
+          {qualityFetching ? <ChartSkeleton /> : <QualityChart data={qualityData} />}
           <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-success">
             💡 A high quality rate (&gt;80%) indicates the team spends most of its capacity on new value rather than rework. Declining trend is an early warning signal.
           </div>
@@ -98,7 +98,7 @@ export default function Dashboard() {
               <span className="text-[10px] font-semibold bg-warning/15 text-warning px-2 py-1 rounded-full">85th: {summary.cycle_time_85th.toFixed(0)}d</span>
             )}
           </div>
-          {isLoading ? <ChartSkeleton /> : (
+          {cycleLoading ? <ChartSkeleton /> : (
             <TimeScatterChart
               data={cycleData?.data ?? []}
               p50={summary?.cycle_time_50th}
@@ -124,7 +124,7 @@ export default function Dashboard() {
             </div>
             <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{weeks} wks</span>
           </div>
-          {isLoading ? <ChartSkeleton /> : <ThroughputChart data={throughputData} weeks={weeks} />}
+          {throughputFetching ? <ChartSkeleton /> : <ThroughputChart data={throughputData} weeks={weeks} />}
           {summary && (
             <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
               💡 Throughput trending {summary.throughput_trend_pct >= 0 ? 'up' : 'down'} — avg <strong className="text-text">{summary.throughput_avg.toFixed(1)} items/week</strong> over the last {weeks} weeks.
@@ -141,7 +141,7 @@ export default function Dashboard() {
             </div>
             <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{weeks} wks</span>
           </div>
-          {isLoading ? <ChartSkeleton /> : <NetFlowChart data={netFlowData} />}
+          {netFlowFetching ? <ChartSkeleton /> : <NetFlowChart data={netFlowData} />}
           <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-warning">
             💡 A consistently positive net flow means the team is reducing WIP. Negative weeks signal backlog growth.
           </div>

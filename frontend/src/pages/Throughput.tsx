@@ -5,14 +5,16 @@ import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
 import EmptyState from '../components/ui/EmptyState'
 
 export default function Throughput() {
-  const { activeProjectId, weeks, itemType } = useFilterStore()
-  const { data = [], isLoading } = useThroughput(activeProjectId, weeks, itemType)
+  const { activeProjectId, weeks, itemType, granularity } = useFilterStore()
+  const { data = [], isLoading } = useThroughput(activeProjectId, weeks, itemType, granularity)
   const { data: summary } = useMetricsSummary(activeProjectId, weeks, itemType)
 
   if (!activeProjectId) return <EmptyState icon="↑" title="No project selected" description="Select a project from the sidebar." />
 
   const avg = summary?.throughput_avg ?? 0
   const trend = summary?.throughput_trend_pct ?? 0
+
+  const granularityLabel = granularity === 'biweek' ? 'Bi-weekly' : granularity === 'month' ? 'Monthly' : 'Weekly'
 
   return (
     <div className="space-y-5">
@@ -30,8 +32,11 @@ export default function Throughput() {
       </div>
 
       <div className="bg-surface border border-border rounded-xl p-5">
-        <div className="text-sm font-bold mb-1">Weekly Throughput</div>
-        <div className="text-xs text-muted mb-4">Items completed per week, stacked by type</div>
+        <div className="flex justify-between items-start mb-1">
+          <div className="text-sm font-bold">{granularityLabel} Throughput</div>
+          <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{granularityLabel}</span>
+        </div>
+        <div className="text-xs text-muted mb-4">Items completed per {granularity === 'month' ? 'month' : granularity === 'biweek' ? 'two weeks' : 'week'}, stacked by type</div>
         {isLoading ? <ChartSkeleton /> : <ThroughputChart data={data} weeks={weeks} />}
         <div className="mt-4 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
           💡 Your team completes an average of <strong className="text-text">{avg.toFixed(1)} items per week</strong>.
