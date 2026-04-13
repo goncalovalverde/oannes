@@ -1,6 +1,6 @@
 import { ChartErrorBoundary } from '../ui/ChartErrorBoundary'
 import Plot from 'react-plotly.js'
-import { darkLayout, plotConfig } from './plotConfig'
+import { darkLayout, plotConfig, COLORS } from './plotConfig'
 
 interface NetFlowPoint {
   week: string
@@ -23,6 +23,7 @@ export default function NetFlowChart({ data }: Props) {
   }
 
   const weeks = data.map(d => d.week)
+  const netValues = data.map(d => d.net)
 
   const traces: Plotly.Data[] = [
     {
@@ -44,12 +45,35 @@ export default function NetFlowChart({ data }: Props) {
       mode: 'lines+markers',
       name: 'Net Flow',
       x: weeks,
-      y: data.map(d => d.net),
+      y: netValues,
       yaxis: 'y2',
       line: { color: '#f59e0b', width: 2 },
-      marker: { size: 5, color: data.map(d => (d.net >= 0 ? '#22c55e' : '#ef4444')) },
+      marker: { size: 5, color: netValues.map(v => (v >= 0 ? '#22c55e' : '#ef4444')) },
     },
   ]
+
+  // Linear trendline on net flow values (least squares)
+  const n = netValues.length
+  if (n > 1) {
+    const xIdx = netValues.map((_, i) => i)
+    const sumX  = xIdx.reduce((a, b) => a + b, 0)
+    const sumY  = netValues.reduce((a, b) => a + b, 0)
+    const sumXY = xIdx.reduce((acc, i) => acc + i * netValues[i], 0)
+    const sumX2 = xIdx.reduce((acc, i) => acc + i * i, 0)
+    const slope     = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)
+    const intercept = (sumY - slope * sumX) / n
+
+    traces.push({
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Net Trend',
+      x: weeks,
+      y: xIdx.map(i => slope * i + intercept),
+      yaxis: 'y2',
+      line: { color: COLORS.purple, dash: 'dash', width: 2 },
+      opacity: 0.8,
+    })
+  }
 
   const layout: Partial<Plotly.Layout> = {
     ...darkLayout,
