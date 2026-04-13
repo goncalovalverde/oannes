@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useCreateProject, useUpdateProject, useTestConnection, useDiscoverStatuses } from '../../api/hooks/useProjects'
 import type { Project, ProjectInput } from '../../types'
+import AlertBanner from '../ui/AlertBanner'
 import clsx from 'clsx'
 
 const PLATFORMS = [
@@ -205,9 +206,9 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
               </button>
 
               {testResult && (
-                <div className={clsx('text-xs px-3 py-2 rounded-lg', testResult.success ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger')}>
-                  {testResult.success ? '✅' : '❌'} {testResult.message}
-                </div>
+                <AlertBanner type={testResult.success ? 'info' : 'error'}>
+                  {testResult.message}
+                </AlertBanner>
               )}
 
               {boards.length > 0 && (

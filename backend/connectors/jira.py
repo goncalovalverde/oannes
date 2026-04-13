@@ -2,8 +2,69 @@ import pandas as pd
 import logging
 from datetime import datetime
 from connectors.base import BaseConnector
+from jira import JIRAError
 
 logger = logging.getLogger(__name__)
+
+
+def _format_jira_error(error: Exception, context: str = "") -> str:
+    """Format Jira errors into user-friendly messages.
+    
+    Args:
+        error: The exception that occurred
+        context: Additional context about what operation failed
+        
+    Returns:
+        A human-readable error message suitable for display to users
+    """
+    error_str = str(error)
+    
+    if isinstance(error, JIRAError):
+        status = getattr(error, 'status_code', None)
+        
+        if status == 401:
+            return (
+                "Invalid Jira credentials. Please check your email/username and API token. "
+                "API tokens can be generated at: https://id.atlassian.com/manage-profile/security/api-tokens"
+            )
+        elif status == 403:
+            return (
+                "You don't have permission to access this Jira project. "
+                "Your Jira user may not have 'Browse Projects' permission. "
+                "Ask your Jira administrator for access."
+            )
+        elif status == 404:
+            return (
+                f"Jira project or resource not found. {context} "
+                "Please check the project key and try again."
+            )
+        elif status == 400:
+            return (
+                f"Invalid Jira request. {context} "
+                "Check your project key and configuration."
+            )
+        else:
+            return (
+                f"Jira API error ({status}). {context} "
+                "Check your Jira URL and try again."
+            )
+    
+    # Handle connection errors
+    if 'timeout' in error_str.lower() or 'connection' in error_str.lower():
+        return (
+            "Cannot connect to Jira server. Check that the Jira URL is correct "
+            "and your network connection is active. (Connection timeout)"
+        )
+    
+    if 'ssl' in error_str.lower() or 'certificate' in error_str.lower():
+        return (
+            "SSL certificate error connecting to Jira. "
+            "Your company's firewall or proxy may be interfering. "
+            "Try removing 'https://' verification or contact your IT team."
+        )
+    
+    # Fallback for unknown errors
+    return f"Jira connection error: {error_str[:100]}"
 
 class JiraConnector(BaseConnector):
     def __init__(self, config: dict, workflow_steps: list):
@@ -29,7 +90,9 @@ class JiraConnector(BaseConnector):
                 "boards": [{"id": p.key, "name": p.name} for p in projects]
             }
         except Exception as e:
-            return {"success": False, "message": str(e), "boards": []}
+            user_message = _format_jira_error(e, context="during connection test")
+            logger.error(f"Jira connection error: {e}", exc_info=True)
+            return {"success": False, "message": user_message, "boards": []}
     
     def discover_statuses(self, board_id: str) -> list:
         try:
@@ -37,7 +100,8 @@ class JiraConnector(BaseConnector):
             statuses = jira.statuses()
             return list(set(s.name for s in statuses))
         except Exception as e:
-            logger.error(f"Error discovering Jira statuses: {e}")
+            user_message = _format_jira_error(e, context=f"discovering statuses for project {board_id}")
+            logger.error(f"Error discovering Jira statuses: {e}", exc_info=True)
             return []
     
     def fetch_items(self) -> pd.DataFrame:
