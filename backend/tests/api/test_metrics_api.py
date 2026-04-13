@@ -480,3 +480,56 @@ class TestMonteCarlo:
         dates = [pcts[k] for k in ("50", "70", "85", "95")]
         assert dates == sorted(dates), f"Percentile dates not ordered: {dates}"
 
+
+
+class TestNetFlow:
+    def test_net_flow_returns_list(self, client, db):
+        """GET /metrics/{id}/net-flow should return a list of weekly entries."""
+        pid = _create_project(client)
+        _seed_items(db, pid, n=10)
+        r = client.get(f"/api/metrics/{pid}/net-flow")
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert isinstance(data, list)
+
+    def test_net_flow_each_entry_has_required_fields(self, client, db):
+        """Each net-flow entry must have week, arrivals, completions, net."""
+        pid = _create_project(client)
+        _seed_items(db, pid, n=10)
+        r = client.get(f"/api/metrics/{pid}/net-flow")
+        assert r.status_code == 200
+        for entry in r.json()["data"]:
+            assert "week" in entry
+            assert "arrivals" in entry
+            assert "completions" in entry
+            assert "net" in entry
+
+    def test_net_flow_net_equals_completions_minus_arrivals(self, client, db):
+        """net field must equal completions - arrivals for every row."""
+        pid = _create_project(client)
+        _seed_items(db, pid, n=15)
+        r = client.get(f"/api/metrics/{pid}/net-flow")
+        for entry in r.json()["data"]:
+            assert entry["net"] == entry["completions"] - entry["arrivals"]
+
+    def test_net_flow_unknown_project_returns_404(self, client):
+        """GET /metrics/999/net-flow should return 404."""
+        r = client.get("/api/metrics/999/net-flow")
+        assert r.status_code == 404
+
+    def test_net_flow_empty_project_returns_empty_list(self, client, db):
+        """Net flow with no items should return empty data list."""
+        pid = _create_project(client)
+        r = client.get(f"/api/metrics/{pid}/net-flow")
+        assert r.status_code == 200
+        assert r.json()["data"] == []
+
+    def test_net_flow_weeks_param_respected(self, client, db):
+        """weeks query param should limit the window."""
+        pid = _create_project(client)
+        _seed_items(db, pid, n=10)
+        r4  = client.get(f"/api/metrics/{pid}/net-flow?weeks=4")
+        r12 = client.get(f"/api/metrics/{pid}/net-flow?weeks=12")
+        assert r4.status_code == 200
+        assert r12.status_code == 200
+        assert len(r4.json()["data"]) <= len(r12.json()["data"])

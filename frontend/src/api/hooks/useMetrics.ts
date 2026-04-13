@@ -83,3 +83,14 @@ export function useMonteCarlo() {
     mutationFn: (data) => client.post('/metrics/monte-carlo', data).then(r => r.data),
   })
 }
+
+export function useNetFlow(projectId: number | null, weeks: number, itemType: string) {
+  return useQuery<{ week: string; arrivals: number; completions: number; net: number }[]>({
+    queryKey: ['metrics', projectId, 'net-flow', weeks, itemType],
+    queryFn: () =>
+      client
+        .get(`/metrics/${projectId}/net-flow`, { params: { weeks, item_type: itemType } })
+        .then(r => r.data.data),
+    enabled: projectId != null,
+  })
+}

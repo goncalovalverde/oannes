@@ -1,13 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { useFilterStore } from '../store/filterStore'
-import { useMetricsSummary } from '../api/hooks/useMetrics'
-import { useThroughput, useCycleTime } from '../api/hooks/useMetrics'
+import { useMetricsSummary, useThroughput, useCycleTime, useNetFlow } from '../api/hooks/useMetrics'
 import { useProjects } from '../api/hooks/useProjects'
 import KpiCard from '../components/ui/KpiCard'
 import AlertBanner from '../components/ui/AlertBanner'
 import EmptyState from '../components/ui/EmptyState'
 import ThroughputChart from '../components/charts/ThroughputChart'
 import TimeScatterChart from '../components/charts/TimeScatterChart'
+import NetFlowChart from '../components/charts/NetFlowChart'
 import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
 
 export default function Dashboard() {
@@ -18,6 +18,7 @@ export default function Dashboard() {
   const { data: summary, isLoading } = useMetricsSummary(activeProjectId, weeks, itemType)
   const { data: throughputData = [] } = useThroughput(activeProjectId, weeks, itemType)
   const { data: cycleData } = useCycleTime(activeProjectId, weeks, itemType)
+  const { data: netFlowData = [] } = useNetFlow(activeProjectId, weeks, itemType)
 
   if (!activeProjectId || projects.length === 0) {
     return (
@@ -110,6 +111,21 @@ export default function Dashboard() {
               💡 Commit to <strong className="text-text">{summary.cycle_time_85th.toFixed(0)} days</strong> and deliver on time <strong className="text-text">85%</strong> of the time.
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Net Flow chart — full width */}
+      <div className="bg-surface border border-border rounded-xl p-5">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <div className="text-sm font-bold">Net Flow</div>
+            <div className="text-xs text-muted mt-0.5">Weekly arrivals vs completions — positive net means the team is shipping faster than work arrives</div>
+          </div>
+          <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{weeks} wks</span>
+        </div>
+        {isLoading ? <ChartSkeleton /> : <NetFlowChart data={netFlowData} />}
+        <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-warning">
+          💡 A consistently positive net flow means the team is reducing WIP. Negative weeks signal backlog growth.
         </div>
       </div>
     </div>

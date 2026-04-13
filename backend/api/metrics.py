@@ -15,6 +15,7 @@ from calculator.flow import (
     cfd as calc_cfd,
     wip_over_time,
     flow_efficiency as calc_flow_efficiency,
+    net_flow as calc_net_flow,
 )
 
 router = APIRouter()
@@ -358,6 +359,38 @@ def get_flow_efficiency(
     steps_list = [{"display_name": s.display_name, "stage": s.stage, "position": s.position, "source_statuses": s.source_statuses or []} for s in steps]
     fe = calc_flow_efficiency(df, steps_list)
     return {"flow_efficiency": fe}
+
+
+@router.get("/{project_id}/net-flow")
+def get_net_flow(
+    project_id: int,
+    weeks: int = Query(12),
+    item_type: str = Query("all"),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    df = get_items_df(project_id, weeks, item_type, db)
+    if df.empty:
+        return {"data": []}
+
+    steps = sorted(project.workflow_steps, key=lambda s: s.position)
+    if not steps:
+        return {"data": []}
+
+    start_col = next((s.display_name for s in steps if s.stage in ("start", "in_flight")), steps[0].display_name)
+    done_col  = next((s.display_name for s in reversed(steps) if s.stage == "done"), steps[-1].display_name)
+
+    result_df = calc_net_flow(df, start_col, done_col, weeks)
+    if result_df.empty:
+        return {"data": []}
+
+    records = result_df.copy()
+    records["week"] = records["week"].dt.strftime("%Y-%m-%d")
+    return {"data": records.to_dict(orient="records")}
+
 
 @router.get("/{project_id}/summary", response_model=MetricsSummary)
 def get_summary(
