@@ -14,7 +14,7 @@ export default function Throughput() {
   const avg = summary?.throughput_avg ?? 0
   const trend = summary?.throughput_trend_pct ?? 0
 
-  const granularityLabel = granularity === 'biweek' ? 'Bi-weekly' : granularity === 'month' ? 'Monthly' : 'Weekly'
+  const granularityLabel = granularity === 'biweek' ? 'Bi-weekly' : granularity === 'month' ? 'Monthly' : granularity === 'day' ? 'Daily' : 'Weekly'
 
   return (
     <div className="space-y-5">
@@ -36,7 +36,7 @@ export default function Throughput() {
           <div className="text-sm font-bold">{granularityLabel} Throughput</div>
           <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{granularityLabel}</span>
         </div>
-        <div className="text-xs text-muted mb-4">Items completed per {granularity === 'month' ? 'month' : granularity === 'biweek' ? 'two weeks' : 'week'}, stacked by type</div>
+        <div className="text-xs text-muted mb-4">Items completed per {granularity === 'month' ? 'month' : granularity === 'biweek' ? 'two weeks' : granularity === 'day' ? 'day' : 'week'}, stacked by type</div>
         {isLoading ? <ChartSkeleton /> : <ThroughputChart data={data} weeks={weeks} />}
         <div className="mt-4 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
           💡 Your team completes an average of <strong className="text-text">{avg.toFixed(1)} items per week</strong>.

@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _GRANULARITY_MAP: dict[str, str] = {
+    "day":    "D",
     "week":   "W-MON",
     "biweek": "2W-MON",
     "month":  "MS",
@@ -34,6 +35,8 @@ def _next_period(date: pd.Timestamp, granularity: str) -> pd.Timestamp:
         return date + pd.DateOffset(months=1)
     elif granularity == "biweek":
         return date + pd.Timedelta(weeks=2)
+    elif granularity == "day":
+        return date + pd.Timedelta(days=1)
     else:
         return date + pd.Timedelta(weeks=1)
 

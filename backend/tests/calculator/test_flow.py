@@ -578,3 +578,63 @@ class TestGranularity:
         default  = quality_rate(df, "Done", weeks=12)
         explicit = quality_rate(df, "Done", weeks=12, granularity="week")
         assert len(default) == len(explicit)
+
+
+class TestDayGranularity:
+    """Daily granularity: throughput, net_flow, quality_rate must all support granularity='day'."""
+
+    def _make_daily_df(self, days: int = 30) -> pd.DataFrame:
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        rows = []
+        for i in range(days):
+            done_at = now - timedelta(days=i)
+            start_at = done_at - timedelta(days=2)
+            rows.append({
+                "item_type": "Story" if i % 2 == 0 else "Bug",
+                "In Progress": pd.Timestamp(start_at),
+                "Done": pd.Timestamp(done_at),
+            })
+        return pd.DataFrame(rows)
+
+    def test_throughput_day_produces_more_buckets_than_weekly(self):
+        from calculator.flow import throughput
+        df = self._make_daily_df(30)
+        weekly = throughput(df, "Done", weeks=4, granularity="week")
+        daily  = throughput(df, "Done", weeks=4, granularity="day")
+        assert len(daily) > len(weekly)
+
+    def test_throughput_day_buckets_differ_by_one_day(self):
+        from calculator.flow import throughput
+        df = self._make_daily_df(14)
+        result = throughput(df, "Done", weeks=2, granularity="day")
+        assert not result.empty
+        diffs = result.index.to_series().diff().dropna()
+        assert all(d == pd.Timedelta(days=1) for d in diffs)
+
+    def test_net_flow_day_produces_more_buckets_than_weekly(self):
+        from calculator.flow import net_flow
+        df = self._make_daily_df(30)
+        weekly = net_flow(df, "In Progress", "Done", weeks=4, granularity="week")
+        daily  = net_flow(df, "In Progress", "Done", weeks=4, granularity="day")
+        assert len(daily) > len(weekly)
+
+    def test_net_flow_day_total_completions_preserved(self):
+        """Daily bucketing must not lose completions vs weekly."""
+        from calculator.flow import net_flow
+        df = self._make_daily_df(14)
+        weekly = net_flow(df, "In Progress", "Done", weeks=2, granularity="week")
+        daily  = net_flow(df, "In Progress", "Done", weeks=2, granularity="day")
+        assert weekly["completions"].sum() == daily["completions"].sum()
+
+    def test_quality_rate_day_produces_more_buckets_than_weekly(self):
+        from calculator.flow import quality_rate
+        df = self._make_daily_df(30)
+        weekly = quality_rate(df, "Done", weeks=4, granularity="week")
+        daily  = quality_rate(df, "Done", weeks=4, granularity="day")
+        assert len(daily) > len(weekly)
+
+    def test_throughput_day_returns_200_via_api(self):
+        """Sanity: 'day' is recognised as a valid granularity value."""
+        from calculator.flow import _resolve_freq
+        assert _resolve_freq("day") == "D"

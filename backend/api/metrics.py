@@ -104,7 +104,7 @@ def get_throughput(
     project_id: int,
     weeks: int = Query(12),
     item_type: str = Query("all"),
-    granularity: Literal["week", "biweek", "month"] = Query("week"),
+    granularity: Literal["day", "week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db)
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -368,7 +368,7 @@ def get_net_flow(
     project_id: int,
     weeks: int = Query(12),
     item_type: str = Query("all"),
-    granularity: Literal["week", "biweek", "month"] = Query("week"),
+    granularity: Literal["day", "week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -400,7 +400,7 @@ def get_quality_rate(
     project_id: int,
     weeks: int = Query(12),
     item_type: str = Query("all"),
-    granularity: Literal["week", "biweek", "month"] = Query("week"),
+    granularity: Literal["day", "week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db),
 ):
     """Percentage of completed items that are NOT bugs/defects, bucketed by granularity."""

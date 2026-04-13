@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type Granularity = 'week' | 'biweek' | 'month'
+export type Granularity = 'day' | 'week' | 'biweek' | 'month'
 
 interface FilterState {
   activeProjectId: number | null

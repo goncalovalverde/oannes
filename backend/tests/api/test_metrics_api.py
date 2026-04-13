@@ -650,3 +650,37 @@ class TestGranularityParam:
         _seed_items(db, pid, n=20)
         r = client.get(f"/api/metrics/{pid}/quality-rate?granularity=month")
         assert r.status_code == 200
+
+
+class TestDayGranularityApi:
+    """API must accept granularity=day for throughput, net-flow, quality-rate."""
+
+    def test_throughput_day_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/throughput?granularity=day&weeks=4")
+        assert r.status_code == 200
+
+    def test_throughput_day_has_more_buckets_than_weekly(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        weekly = client.get(f"/api/metrics/{pid}/throughput?granularity=week&weeks=4").json()["data"]
+        daily  = client.get(f"/api/metrics/{pid}/throughput?granularity=day&weeks=4").json()["data"]
+        assert len(daily) > len(weekly)
+
+    def test_net_flow_day_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/net-flow?granularity=day&weeks=2")
+        assert r.status_code == 200
+
+    def test_quality_rate_day_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/quality-rate?granularity=day&weeks=2")
+        assert r.status_code == 200
+
+    def test_invalid_granularity_still_422(self, client, db):
+        pid = _create_project(client)
+        r = client.get(f"/api/metrics/{pid}/throughput?granularity=quarterly")
+        assert r.status_code == 422
