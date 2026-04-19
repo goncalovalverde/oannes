@@ -14,11 +14,13 @@ const PLATFORMS = [
   { id: 'csv',         label: 'CSV / Excel',   icon: '📄', desc: 'Import from file' },
 ]
 
-const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string; help?: string; optional?: boolean }>> = {
+const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string; help?: string; optional?: boolean; conditional?: (config: Record<string, string>) => boolean }>> = {
   jira: [
     { key: 'url',       label: 'Jira URL',    placeholder: 'https://yourcompany.atlassian.net' },
-    { key: 'email',     label: 'Email',       type: 'email', placeholder: 'you@company.com' },
-    { key: 'api_token', label: 'API Token',   type: 'password', help: 'Create at: id.atlassian.com/manage-profile/security/api-tokens' },
+    { key: 'auth_type', label: 'Authentication Type', type: 'select', optional: false, help: 'Choose based on your Jira instance configuration' },
+    { key: 'email',     label: 'Email',       type: 'email', placeholder: 'you@company.com', conditional: (cfg) => cfg.auth_type === 'api_token' },
+    { key: 'api_token', label: 'API Token',   type: 'password', help: 'Create at: id.atlassian.com/manage-profile/security/api-tokens', conditional: (cfg) => cfg.auth_type === 'api_token' },
+    { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', help: 'Create at: your Jira instance → Profile → Personal Access Tokens', conditional: (cfg) => cfg.auth_type === 'personal_access_token' },
     { key: 'jql',       label: 'JQL Filter',  placeholder: 'project = MYPROJ', optional: true },
   ],
   trello: [
@@ -181,21 +183,38 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
                 />
               </div>
 
-              {(PLATFORM_FIELDS[platform] ?? []).map(field => (
-                <div key={field.key}>
-                  <label className="block text-[11px] font-semibold text-muted uppercase tracking-widest mb-1">
-                    {field.label} {field.optional && <span className="normal-case text-muted font-normal">(optional)</span>}
-                  </label>
-                  <input
-                    type={field.type ?? 'text'}
-                    placeholder={field.placeholder}
-                    value={config[field.key] ?? ''}
-                    onChange={e => setConfig(c => ({ ...c, [field.key]: e.target.value }))}
-                    className="w-full bg-surface2 border border-border text-text text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-primary"
-                  />
-                  {field.help && <div className="text-[10px] text-muted mt-1">💡 {field.help}</div>}
-                </div>
-              ))}
+              {(PLATFORM_FIELDS[platform] ?? []).map(field => {
+                const shouldShow = !field.conditional || field.conditional(config)
+                if (!shouldShow) return null
+                
+                return (
+                  <div key={field.key}>
+                    <label className="block text-[11px] font-semibold text-muted uppercase tracking-widest mb-1">
+                      {field.label} {field.optional && <span className="normal-case text-muted font-normal">(optional)</span>}
+                    </label>
+                    {field.type === 'select' ? (
+                      <select
+                        value={config[field.key] ?? ''}
+                        onChange={e => setConfig(c => ({ ...c, [field.key]: e.target.value }))}
+                        className="w-full bg-surface2 border border-border text-text text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-primary"
+                      >
+                        <option value="">-- Select --</option>
+                        <option value="api_token">API Token (Email + Token)</option>
+                        <option value="personal_access_token">Personal Access Token</option>
+                      </select>
+                    ) : (
+                      <input
+                        type={field.type ?? 'text'}
+                        placeholder={field.placeholder}
+                        value={config[field.key] ?? ''}
+                        onChange={e => setConfig(c => ({ ...c, [field.key]: e.target.value }))}
+                        className="w-full bg-surface2 border border-border text-text text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-primary"
+                      />
+                    )}
+                    {field.help && <div className="text-[10px] text-muted mt-1">💡 {field.help}</div>}
+                  </div>
+                )
+              })}
 
               <button
                 onClick={handleTest}

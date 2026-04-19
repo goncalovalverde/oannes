@@ -267,3 +267,79 @@ def test_fetch_items_parses_v3_issue_structure():
         assert df.iloc[0]['item_key'] == 'TEST-1'
         assert df.iloc[0]['item_type'] == 'Story'
         assert df.iloc[0]['cycle_time_days'] == 3  # Jan 2 → Jan 5
+
+
+def test_jira_personal_access_token_auth():
+    """JiraConnector should support Personal Access Token (Bearer) authentication."""
+    from connectors.jira import JiraConnector
+    
+    connector = JiraConnector({
+        'url': 'https://jira.example.com',
+        'auth_type': 'personal_access_token',
+        'personal_access_token': 'pat_token_12345'
+    }, [])
+    
+    with patch('connectors.jira.requests.get') as mock_get:
+        mock_resp = Mock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {"issues": [], "total": 0}
+        mock_get.return_value = mock_resp
+        
+        connector.fetch_items()
+        
+        # Verify Bearer token was sent in Authorization header
+        call_kwargs = mock_get.call_args[1]
+        assert 'headers' in call_kwargs
+        assert call_kwargs['headers']['Authorization'] == 'Bearer pat_token_12345'
+        # Verify auth parameter is not used for PAT
+        assert call_kwargs.get('auth') is None
+
+
+def test_jira_api_token_auth_still_works():
+    """JiraConnector should still support API Token (Basic Auth) authentication."""
+    from connectors.jira import JiraConnector
+    
+    connector = JiraConnector({
+        'url': 'https://jira.example.com',
+        'auth_type': 'api_token',
+        'email': 'user@example.com',
+        'api_token': 'api_token_12345',
+        'project_key': 'TEST'
+    }, [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['done']}])
+    
+    with patch('connectors.jira.requests.get') as mock_get:
+        mock_resp = Mock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {"issues": [], "total": 0}
+        mock_get.return_value = mock_resp
+        
+        connector.fetch_items()
+        
+        # Verify basic auth tuple was passed
+        call_kwargs = mock_get.call_args[1]
+        assert call_kwargs['auth'] == ('user@example.com', 'api_token_12345')
+
+
+def test_jira_pat_test_connection():
+    """test_connection should work with PAT authentication."""
+    from connectors.jira import JiraConnector
+    
+    connector = JiraConnector({
+        'url': 'https://jira.example.com',
+        'auth_type': 'personal_access_token',
+        'personal_access_token': 'pat_token'
+    }, [])
+    
+    with patch('jira.JIRA') as mock_jira_class:
+        mock_jira = Mock()
+        mock_jira.projects.return_value = [
+            Mock(key='PROJ1', name='Project 1'),
+            Mock(key='PROJ2', name='Project 2')
+        ]
+        mock_jira_class.return_value = mock_jira
+        
+        result = connector.test_connection()
+        
+        assert result['success'] is True
+        assert len(result['boards']) == 2
+        assert result['boards'][0]['id'] == 'PROJ1'

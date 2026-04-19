@@ -15,7 +15,7 @@ Connect Jira, Trello, Azure DevOps, GitLab, Linear, Shortcut or CSV — and get 
 | **Interface** | CLI + YAML config files | Web GUI (React) |
 | **Backend** | Python scripts | FastAPI REST API |
 | **Storage** | No persistence | SQLite (local) |
-| **Platforms** | Jira only | Jira, Trello, Azure DevOps, GitLab, CSV |
+| **Platforms** | Jira, Trello,GitLab, CSV| Jira, Trello, Azure DevOps, GitLab, CSV |
 | **Deployment** | Run manually | Single Docker container |
 | **Credentials** | Plaintext config files | AES-encrypted at rest |
 | **Forecasting** | Monte Carlo (basic) | Monte Carlo with seed control + vectorised simulation |

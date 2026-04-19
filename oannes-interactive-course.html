@@ -1,0 +1,2402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Oannes Works: Interactive Course</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-bg:             #FAF7F2;
+      --color-bg-warm:        #F5F0E8;
+      --color-bg-code:        #1E1E2E;
+      --color-text:           #2C2A28;
+      --color-text-secondary: #6B6560;
+      --color-text-muted:     #9E9790;
+      --color-border:         #E5DFD6;
+      --color-border-light:   #EEEBE5;
+      --color-surface:        #FFFFFF;
+      --color-surface-warm:   #FDF9F3;
+
+      --color-accent:         #D94F30;
+      --color-accent-hover:   #C4432A;
+      --color-accent-light:   #FDEEE9;
+      --color-accent-muted:   #E8836C;
+
+      --color-success:        #2D8B55;
+      --color-success-light:  #E8F5EE;
+      --color-error:          #C93B3B;
+      --color-error-light:    #FDE8E8;
+      --color-info:           #2A7B9B;
+      --color-info-light:     #E4F2F7;
+
+      --color-actor-1:        #D94F30;
+      --color-actor-2:        #2A7B9B;
+      --color-actor-3:        #7B6DAA;
+      --color-actor-4:        #D4A843;
+      --color-actor-5:        #2D8B55;
+
+      --font-display:  'Bricolage Grotesque', Georgia, serif;
+      --font-body:     'DM Sans', -apple-system, sans-serif;
+      --font-mono:     'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+      --text-xs:   0.75rem;
+      --text-sm:   0.875rem;
+      --text-base: 1rem;
+      --text-lg:   1.125rem;
+      --text-xl:   1.25rem;
+      --text-2xl:  1.5rem;
+      --text-3xl:  1.875rem;
+      --text-4xl:  2.25rem;
+      --text-5xl:  3rem;
+      --text-6xl:  3.75rem;
+
+      --leading-tight:  1.15;
+      --leading-snug:   1.3;
+      --leading-normal: 1.6;
+      --leading-loose:  1.8;
+
+      --space-1:  0.25rem;
+      --space-2:  0.5rem;
+      --space-3:  0.75rem;
+      --space-4:  1rem;
+      --space-5:  1.25rem;
+      --space-6:  1.5rem;
+      --space-8:  2rem;
+      --space-10: 2.5rem;
+      --space-12: 3rem;
+      --space-16: 4rem;
+      --space-20: 5rem;
+      --space-24: 6rem;
+
+      --content-width:      800px;
+      --content-width-wide: 1000px;
+      --nav-height:         50px;
+      --radius-sm:  8px;
+      --radius-md:  12px;
+      --radius-lg:  16px;
+      --radius-full: 9999px;
+
+      --shadow-sm:  0 1px 2px rgba(44, 42, 40, 0.05);
+      --shadow-md:  0 4px 12px rgba(44, 42, 40, 0.08);
+      --shadow-lg:  0 8px 24px rgba(44, 42, 40, 0.1);
+      --shadow-xl:  0 16px 48px rgba(44, 42, 40, 0.12);
+
+      --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+      --duration-fast:   150ms;
+      --duration-normal: 300ms;
+      --duration-slow:   500ms;
+      --stagger-delay:   120ms;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      scroll-snap-type: y proximity;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-body);
+      color: var(--color-text);
+      background: var(--color-bg);
+      background-image: radial-gradient(
+        ellipse at 20% 50%,
+        rgba(217, 79, 48, 0.03) 0%,
+        transparent 50%
+      );
+      line-height: var(--leading-normal);
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: var(--color-border);
+      border-radius: var(--radius-full);
+    }
+
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--nav-height);
+      background: rgba(250, 247, 242, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--color-border);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+    }
+
+    .progress-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 3px;
+      background: var(--color-accent);
+      transition: width 150ms linear;
+    }
+
+    .nav-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 0 var(--space-6);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-8);
+    }
+
+    .nav-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: var(--text-lg);
+      white-space: nowrap;
+    }
+
+    .nav-dots {
+      display: flex;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .nav-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid var(--color-text-muted);
+      background: transparent;
+      cursor: pointer;
+      transition: all var(--duration-fast);
+      padding: 0;
+    }
+
+    .nav-dot.current {
+      border-color: var(--color-accent);
+      box-shadow: 0 0 8px rgba(217, 79, 48, 0.3);
+    }
+
+    .nav-dot.visited {
+      background: var(--color-accent);
+      border-color: var(--color-accent);
+    }
+
+    .module {
+      min-height: 100dvh;
+      scroll-snap-align: start;
+      padding: var(--space-16) var(--space-6);
+      padding-top: calc(var(--nav-height) + var(--space-12));
+      display: flex;
+      align-items: center;
+    }
+
+    .module.module-1 { background: var(--color-bg); }
+    .module.module-2 { background: var(--color-bg-warm); }
+    .module.module-3 { background: var(--color-bg); }
+    .module.module-4 { background: var(--color-bg-warm); }
+    .module.module-5 { background: var(--color-bg); }
+    .module.module-6 { background: var(--color-bg-warm); }
+    .module.module-7 { background: var(--color-bg); }
+
+    .module-content {
+      max-width: var(--content-width);
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .module-header {
+      margin-bottom: var(--space-12);
+    }
+
+    .module-number {
+      font-family: var(--font-display);
+      font-size: var(--text-6xl);
+      font-weight: 800;
+      color: var(--color-accent);
+      opacity: 0.15;
+      display: block;
+      line-height: 1;
+    }
+
+    .module-title {
+      font-family: var(--font-display);
+      font-size: var(--text-4xl);
+      font-weight: 700;
+      margin: var(--space-4) 0 var(--space-3);
+      line-height: var(--leading-snug);
+    }
+
+    .module-subtitle {
+      font-size: var(--text-lg);
+      color: var(--color-text-secondary);
+      line-height: var(--leading-snug);
+    }
+
+    .screen {
+      margin-bottom: var(--space-12);
+      padding: var(--space-8);
+      background: var(--color-surface);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .screen-heading {
+      font-family: var(--font-display);
+      font-size: var(--text-2xl);
+      font-weight: 600;
+      margin-bottom: var(--space-6);
+      line-height: var(--leading-snug);
+    }
+
+    .screen p {
+      margin-bottom: var(--space-4);
+      line-height: var(--leading-normal);
+    }
+
+    .screen p:last-child { margin-bottom: 0; }
+
+    .animate-in {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity var(--duration-slow) var(--ease-out),
+                  transform var(--duration-slow) var(--ease-out);
+    }
+
+    .animate-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Translation Blocks */
+    .translation-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+      margin: var(--space-8) 0;
+    }
+
+    .translation-code {
+      background: var(--color-bg-code);
+      color: #CDD6F4;
+      padding: var(--space-6);
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      line-height: 1.7;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .translation-code pre,
+    .translation-code code {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: hidden;
+    }
+
+    .translation-english {
+      background: var(--color-surface-warm);
+      padding: var(--space-6);
+      font-size: var(--text-sm);
+      line-height: 1.7;
+      border-left: 3px solid var(--color-accent);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .translation-label {
+      position: absolute;
+      top: var(--space-2);
+      right: var(--space-3);
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      opacity: 0.5;
+      color: #CDD6F4;
+    }
+
+    .translation-english .translation-label {
+      position: static;
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      margin-bottom: var(--space-3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .tl {
+      margin: 0 0 var(--space-3) 0;
+      line-height: var(--leading-normal);
+    }
+
+    .tl:last-child { margin-bottom: 0; }
+
+    .code-keyword  { color: #CBA6F7; }
+    .code-string   { color: #A6E3A1; }
+    .code-function { color: #89B4FA; }
+    .code-comment  { color: #6C7086; }
+    .code-number   { color: #FAB387; }
+    .code-property { color: #F9E2AF; }
+    .code-operator { color: #94E2D5; }
+
+    /* Chat Animation */
+    .chat-window {
+      background: var(--color-surface-warm);
+      border-radius: var(--radius-md);
+      padding: var(--space-6);
+      margin: var(--space-8) 0;
+      box-shadow: var(--shadow-md);
+    }
+
+    .chat-messages {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      min-height: 200px;
+    }
+
+    .chat-message {
+      display: flex;
+      gap: var(--space-3);
+      align-items: flex-start;
+      animation: fadeSlideUp 0.3s var(--ease-out);
+    }
+
+    .chat-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: var(--text-sm);
+      flex-shrink: 0;
+    }
+
+    .chat-bubble {
+      background: white;
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      max-width: 70%;
+      flex: 1;
+    }
+
+    .chat-sender {
+      display: block;
+      font-weight: 600;
+      font-size: var(--text-sm);
+      margin-bottom: var(--space-2);
+    }
+
+    .chat-bubble p {
+      margin: 0;
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+    }
+
+    .chat-typing {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+      margin-top: var(--space-4);
+    }
+
+    .chat-typing-dots {
+      display: flex;
+      gap: var(--space-2);
+      align-items: center;
+    }
+
+    .typing-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-text-muted);
+      animation: typingBounce 1.4s infinite;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .chat-controls {
+      display: flex;
+      gap: var(--space-3);
+      margin-top: var(--space-6);
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .chat-progress {
+      font-size: var(--text-sm);
+      color: var(--color-text-secondary);
+      margin-left: auto;
+    }
+
+    /* Flow Animation */
+    .flow-animation {
+      background: var(--color-surface-warm);
+      border-radius: var(--radius-md);
+      padding: var(--space-8);
+      margin: var(--space-8) 0;
+      box-shadow: var(--shadow-md);
+    }
+
+    .flow-actors {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      gap: var(--space-8);
+      margin-bottom: var(--space-12);
+      min-height: 100px;
+      position: relative;
+    }
+
+    .flow-actor {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      transition: all var(--duration-normal) var(--ease-out);
+      font-size: var(--text-sm);
+      font-weight: 500;
+    }
+
+    .flow-actor.active {
+      background: var(--color-accent-light);
+      box-shadow: 0 0 0 3px var(--color-accent), 0 0 20px rgba(217, 79, 48, 0.2);
+      transform: scale(1.05);
+    }
+
+    .flow-actor-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--color-actor-1);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: var(--text-lg);
+    }
+
+    .flow-step-label {
+      text-align: center;
+      font-size: var(--text-base);
+      color: var(--color-text-secondary);
+      margin: var(--space-6) 0;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .flow-controls {
+      display: flex;
+      gap: var(--space-3);
+      margin-top: var(--space-6);
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .flow-progress {
+      font-size: var(--text-sm);
+      color: var(--color-text-secondary);
+    }
+
+    /* Quizzes */
+    .quiz-container {
+      margin: var(--space-8) 0;
+    }
+
+    .quiz-question-block {
+      background: var(--color-surface-warm);
+      padding: var(--space-6);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-6);
+    }
+
+    .quiz-question {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: 600;
+      margin-bottom: var(--space-4);
+    }
+
+    .quiz-options {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin-bottom: var(--space-4);
+    }
+
+    .quiz-option {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      border: 2px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: white;
+      cursor: pointer;
+      transition: border-color var(--duration-fast), background var(--duration-fast);
+      font-size: var(--text-sm);
+      text-align: left;
+      width: 100%;
+    }
+
+    .quiz-option:hover { border-color: var(--color-accent-muted); }
+    .quiz-option.selected { border-color: var(--color-accent); background: var(--color-accent-light); }
+    .quiz-option.correct { border-color: var(--color-success); background: var(--color-success-light); }
+    .quiz-option.incorrect { border-color: var(--color-error); background: var(--color-error-light); }
+
+    .quiz-option-radio {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid var(--color-border);
+      transition: all var(--duration-fast);
+      flex-shrink: 0;
+    }
+
+    .quiz-option.selected .quiz-option-radio {
+      border-color: var(--color-accent);
+      background: var(--color-accent);
+      box-shadow: inset 0 0 0 3px white;
+    }
+
+    .quiz-feedback {
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-height var(--duration-normal), opacity var(--duration-normal);
+      font-size: var(--text-sm);
+    }
+
+    .quiz-feedback.show {
+      max-height: 300px;
+      opacity: 1;
+      padding: var(--space-3);
+      margin-top: var(--space-2);
+      border-radius: var(--radius-sm);
+    }
+
+    .quiz-feedback.success { background: var(--color-success-light); color: var(--color-success); }
+    .quiz-feedback.error { background: var(--color-error-light); color: var(--color-error); }
+    .quiz-feedback.warning { background: var(--color-info-light); color: var(--color-info); }
+
+    .quiz-check-btn, .quiz-reset-btn {
+      padding: var(--space-3) var(--space-6);
+      background: var(--color-accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-weight: 500;
+      transition: background var(--duration-fast);
+      margin-right: var(--space-2);
+      margin-top: var(--space-4);
+    }
+
+    .quiz-check-btn:hover { background: var(--color-accent-hover); }
+    .quiz-reset-btn { background: var(--color-text-muted); }
+    .quiz-reset-btn:hover { background: var(--color-text-secondary); }
+
+    .quiz-overall-feedback {
+      margin-top: var(--space-4);
+      padding: var(--space-4);
+      border-radius: var(--radius-sm);
+      font-size: var(--text-sm);
+      text-align: center;
+    }
+
+    /* Callout Boxes */
+    .callout {
+      display: flex;
+      gap: var(--space-4);
+      padding: var(--space-6);
+      border-radius: var(--radius-md);
+      margin: var(--space-8) 0;
+      border-left: 4px solid;
+    }
+
+    .callout-accent {
+      background: var(--color-accent-light);
+      color: var(--color-accent);
+      border-left-color: var(--color-accent);
+    }
+
+    .callout-icon {
+      font-size: var(--text-2xl);
+      flex-shrink: 0;
+    }
+
+    .callout-title {
+      display: block;
+      font-weight: 600;
+      margin-bottom: var(--space-2);
+    }
+
+    .callout-content p {
+      margin: 0;
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+    }
+
+    /* Cards */
+    .pattern-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--space-4);
+      margin: var(--space-8) 0;
+    }
+
+    .pattern-card {
+      background: white;
+      border-radius: var(--radius-md);
+      padding: var(--space-6);
+      box-shadow: var(--shadow-sm);
+      border-top: 3px solid var(--color-accent);
+      transition: transform var(--duration-normal) var(--ease-out), box-shadow var(--duration-normal);
+    }
+
+    .pattern-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .pattern-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--text-lg);
+      margin-bottom: var(--space-3);
+    }
+
+    .pattern-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      margin-bottom: var(--space-2);
+      font-size: var(--text-base);
+    }
+
+    .pattern-desc {
+      font-size: var(--text-sm);
+      color: var(--color-text-secondary);
+      margin: 0;
+      line-height: var(--leading-normal);
+    }
+
+    /* Icon Rows */
+    .icon-rows {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      margin: var(--space-8) 0;
+    }
+
+    .icon-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      background: white;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .icon-circle {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--color-actor-1);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--text-lg);
+      flex-shrink: 0;
+    }
+
+    .icon-row strong { display: block; font-size: var(--text-base); margin-bottom: var(--space-1); }
+    .icon-row p { margin: 0; font-size: var(--text-sm); color: var(--color-text-secondary); line-height: var(--leading-normal); }
+
+    /* Step Cards */
+    .step-cards {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin: var(--space-8) 0;
+    }
+
+    .step-card {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-4);
+      padding: var(--space-4) var(--space-5);
+      background: white;
+      border-radius: var(--radius-md);
+      border-left: 3px solid var(--color-accent);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      color: white;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      flex-shrink: 0;
+      font-size: var(--text-base);
+    }
+
+    .step-body strong { display: block; margin-bottom: var(--space-2); font-size: var(--text-base); }
+    .step-body p { margin: 0; font-size: var(--text-sm); color: var(--color-text-secondary); line-height: var(--leading-normal); }
+
+    /* Tooltips */
+    .term {
+      border-bottom: 1.5px dashed var(--color-accent-muted);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .term:hover, .term.active {
+      border-bottom-color: var(--color-accent);
+      color: var(--color-accent);
+    }
+
+    .term-tooltip {
+      position: fixed;
+      background: var(--color-bg-code);
+      color: #CDD6F4;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-sm);
+      font-size: var(--text-sm);
+      font-family: var(--font-body);
+      line-height: var(--leading-normal);
+      width: max(200px, min(320px, 80vw));
+      box-shadow: var(--shadow-lg);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity var(--duration-fast);
+      z-index: 10000;
+    }
+
+    .term-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: var(--color-bg-code);
+    }
+
+    .term-tooltip.visible { opacity: 1; }
+    .term-tooltip.flip { bottom: auto; }
+    .term-tooltip.flip::after {
+      top: auto;
+      bottom: 100%;
+      border-top-color: transparent;
+      border-bottom-color: var(--color-bg-code);
+    }
+
+    /* Buttons */
+    button {
+      font-family: var(--font-body);
+      padding: var(--space-3) var(--space-6);
+      border: none;
+      border-radius: var(--radius-sm);
+      background: var(--color-accent);
+      color: white;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background var(--duration-fast);
+    }
+
+    button:hover { background: var(--color-accent-hover); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      :root {
+        --text-4xl: 1.875rem;
+        --text-5xl: 2.25rem;
+        --text-6xl: 3rem;
+      }
+
+      .translation-block {
+        grid-template-columns: 1fr;
+      }
+
+      .translation-english {
+        border-left: none;
+        border-top: 3px solid var(--color-accent);
+      }
+
+      .pattern-cards {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .nav-dots {
+        gap: var(--space-2);
+      }
+
+      .chat-bubble {
+        max-width: 85%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      :root {
+        --text-4xl: 1.5rem;
+        --text-5xl: 1.875rem;
+        --text-6xl: 2.25rem;
+      }
+
+      .module {
+        padding: var(--space-8) var(--space-4);
+      }
+
+      .nav-title {
+        font-size: var(--text-base);
+      }
+
+      .nav-dots {
+        display: none;
+      }
+
+      .pattern-cards {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-actors {
+        flex-direction: column;
+        gap: var(--space-6);
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="progress-bar" role="progressbar" aria-valuenow="0"></div>
+    <div class="nav-inner">
+      <span class="nav-title">How Oannes Works</span>
+      <div class="nav-dots">
+        <button class="nav-dot current" data-target="module-1" role="tab" aria-label="Module 1: What is Oannes?"></button>
+        <button class="nav-dot" data-target="module-2" role="tab" aria-label="Module 2: The Journey of Data"></button>
+        <button class="nav-dot" data-target="module-3" role="tab" aria-label="Module 3: Meet the Connectors"></button>
+        <button class="nav-dot" data-target="module-4" role="tab" aria-label="Module 4: The Flow Metrics Engine"></button>
+        <button class="nav-dot" data-target="module-5" role="tab" aria-label="Module 5: Building the Dashboard"></button>
+        <button class="nav-dot" data-target="module-6" role="tab" aria-label="Module 6: Predicting the Future"></button>
+        <button class="nav-dot" data-target="module-7" role="tab" aria-label="Module 7: Putting It All Together"></button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MODULE 1: What is Oannes? -->
+  <section class="module module-1" id="module-1">
+    <div class="module-content">
+      <header class="module-header animate-in">
+        <span class="module-number">01</span>
+        <h1 class="module-title">What is Oannes?</h1>
+        <p class="module-subtitle">A tool that turns team data into insights about how fast you deliver</p>
+      </header>
+
+      <div class="module-body">
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Problem</h2>
+          <p>Imagine you're leading a team. You want to know: <strong>How fast do we actually ship?</strong> Not "we work really hard" — actual data.</p>
+          <p>You could ask team members, but they'll guess. You could build a spreadsheet, but spreadsheets break. You could use your issue tracker's built-in reports, but they don't show the patterns that actually predict delivery.</p>
+          <p>That's where Oannes comes in. It takes your existing issue data (from Jira, Trello, Azure DevOps, GitLab, or CSV) and calculates <span class="term" data-definition="A metric that measures how many work items a team completes per week. It reveals your team's sustainable delivery rate — like knowing how many miles per gallon your car gets.">throughput</span>, <span class="term" data-definition="The time between when work starts and when it's marked done. Unlike lead time, this measures only the active working period, not waiting time.">cycle time</span>, and other metrics that let you predict the future.</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Moment of Magic</h2>
+          <p>Let's say you're in a standup and someone asks: <strong>"When will feature X ship?"</strong></p>
+          <p>Instead of guessing, you open Oannes. You see:</p>
+          <ul style="margin: var(--space-4) 0;">
+            <li style="margin-bottom: var(--space-2);">Your team completes 8 items per week on average</li>
+            <li style="margin-bottom: var(--space-2);">The backlog has 40 items</li>
+            <li style="margin-bottom: var(--space-2);">Based on historical patterns, there's a 70% chance you'll ship everything in 5 weeks</li>
+          </ul>
+          <p>That's a data-driven answer. That's Oannes.</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">How It Works (30-Second Version)</h2>
+          <div class="step-cards">
+            <div class="step-card">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <strong>Connect your data source</strong>
+                <p>Tell Oannes where your work items live (Jira, Trello, etc.) and give it credentials</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <strong>Oannes syncs your issues</strong>
+                <p>It downloads completed work items and extracts the dates: created, started, done</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <strong>The engine calculates metrics</strong>
+                <p>It does the math: throughput, cycle time, lead time, forecasts, bottlenecks</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">4</div>
+              <div class="step-body">
+                <strong>You see interactive charts</strong>
+                <p>Beautiful, zoomable dashboards show trends, patterns, and predictions</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Why This Matters</h2>
+          <p>Most teams are <strong>flying blind</strong>. They use gut feel, hope, and guessing.</p>
+          <p>Oannes gives you a <span class="term" data-definition="A shared understanding based on data, not intuition. When everyone sees the same numbers, conversations about 'how fast are we?' become fact-based instead of opinion-based.">shared reality</span>. When you have data, you can:</p>
+          <div class="pattern-cards">
+            <div class="pattern-card">
+              <div class="pattern-icon">📊</div>
+              <div class="pattern-title">Plan realistically</div>
+              <div class="pattern-desc">Know your actual velocity, not hope</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🔍</div>
+              <div class="pattern-title">Spot bottlenecks</div>
+              <div class="pattern-desc">See where work gets stuck</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🎯</div>
+              <div class="pattern-title">Make better decisions</div>
+              <div class="pattern-desc">Hire? Automate? Focus on quality?</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">📈</div>
+              <div class="pattern-title">Show progress</div>
+              <div class="pattern-desc">Prove improvements with data</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Quiz: Do You Need Oannes?</h2>
+          <div class="quiz-container">
+            <div class="quiz-question-block" data-question="q1" data-correct="option-a">
+              <h3 class="quiz-question">Your product manager asks: "When will the dashboard redesign launch?"</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>You look at historical cycle time data to make an informed prediction</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>You guess "probably 3 weeks" hoping it's right</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q1-feedback"></div>
+            </div>
+
+            <div class="quiz-question-block" data-question="q2" data-correct="option-b">
+              <h3 class="quiz-question">Your team's velocity is unpredictable. What's the root cause?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>You don't have a tool to analyze it</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>You don't know — you need data to find out</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q2-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('module-1')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('module-1')">Try Again</button>
+            <div class="quiz-overall-feedback" id="module-1-overall"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULE 2: The Journey of Data -->
+  <section class="module module-2" id="module-2">
+    <div class="module-content">
+      <header class="module-header animate-in">
+        <span class="module-number">02</span>
+        <h1 class="module-title">The Journey of Data</h1>
+        <p class="module-subtitle">From issue tracker to insights — trace what happens when you create a project</p>
+      </header>
+
+      <div class="module-body">
+        <section class="screen animate-in">
+          <h2 class="screen-heading">A User Opens Oannes</h2>
+          <p>Picture this: a team lead opens Oannes for the first time. They see a <span class="term" data-definition="A visual interface that guides users through a multi-step process, one step at a time. In Oannes, it asks: which platform (Jira/Trello)? Do you have credentials? Any stage mappings? At the end, boom, project created.">wizard</span>.</p>
+          <p>The wizard asks: <strong>"Where does your team track work?"</strong> They pick Jira Cloud. Then: <strong>"What's your Jira API token?"</strong> They paste it in. Finally: <strong>"Which columns equal done?"</strong></p>
+          <p>All of this happens in the <span class="term" data-definition="The part of an app that runs in your web browser. In Oannes, it's built with React, TypeScript, and shows the pretty interface you interact with.">frontend</span> — the thing the user sees.</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Behind the Scenes: The Backend Wakes Up</h2>
+          <p>When the user clicks "Create Project," the frontend sends a request to the <span class="term" data-definition="The 'brain' of the application running on a server. It does the thinking, fetches data from external services, and runs calculations. In Oannes, it's built with Python and FastAPI.">backend</span>.</p>
+          <p>The backend receives this request and does three critical things:</p>
+          <div class="pattern-cards">
+            <div class="pattern-card">
+              <div class="pattern-icon">🔐</div>
+              <div class="pattern-title">Encrypts & saves credentials</div>
+              <div class="pattern-desc">The API token is encrypted at rest using <span class="term" data-definition="AES-128 encryption with Fernet — a method that scrambles data so only someone with the secret key can unscramble it. Even if someone steals the database, the credentials are useless without the key.">AES-128 encryption</span> before storing in the database</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">📝</div>
+              <div class="pattern-title">Creates a project record</div>
+              <div class="pattern-desc">Saves the project name, which platform, stage mappings — all to SQLite</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🔄</div>
+              <div class="pattern-title">Schedules a sync job</div>
+              <div class="pattern-desc">Queues background task to fetch work items immediately</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Data Flows In</h2>
+          <p>A background worker (APScheduler) wakes up and starts the sync. Here's what happens in order:</p>
+          <div class="chat-window">
+            <div class="chat-messages" id="chat-messages">
+              <div class="chat-message" data-msg="0" data-sender="actor-1" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-1)">F</div>
+                <div class="chat-bubble">
+                  <span class="chat-sender" style="color: var(--color-actor-1)">Frontend</span>
+                  <p>User just created a Jira project. Sync it!</p>
+                </div>
+              </div>
+              <div class="chat-message" data-msg="1" data-sender="actor-2" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-2)">C</div>
+                <div class="chat-bubble">
+                  <span class="chat-sender" style="color: var(--color-actor-2)">Connector (Jira)</span>
+                  <p>Got it. Fetching all issues from Jira Cloud using the API...</p>
+                </div>
+              </div>
+              <div class="chat-message" data-msg="2" data-sender="actor-3" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-3)">J</div>
+                <div class="chat-bubble">
+                  <span class="chat-sender" style="color: var(--color-actor-3)">Jira API</span>
+                  <p>Here are 847 issues. Created dates, status, transitions... enjoy! 📦</p>
+                </div>
+              </div>
+              <div class="chat-message" data-msg="3" data-sender="actor-2" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-2)">C</div>
+                <div class="chat-bubble">
+                  <span class="chat-sender" style="color: var(--color-actor-2)">Connector</span>
+                  <p>Processing... mapping Jira statuses to stages (Done column = done stage)</p>
+                </div>
+              </div>
+              <div class="chat-message" data-msg="4" data-sender="actor-4" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-4)">D</div>
+                <div class="chat-bubble">
+                  <span class="chat-sender" style="color: var(--color-actor-4)">Database (SQLite)</span>
+                  <p>Saving 847 work items. Done!</p>
+                </div>
+              </div>
+              <div class="chat-message" data-msg="5" data-sender="actor-5" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-5)">E</div>
+                <div class="chat-bubble">
+                  <span class="chat-sender" style="color: var(--color-actor-5)">Engine (Flow Calc)</span>
+                  <p>Running calculations... throughput, cycle time, percentiles...</p>
+                </div>
+              </div>
+              <div class="chat-message" data-msg="6" data-sender="actor-1" style="display:none">
+                <div class="chat-avatar" style="background: var(--color-actor-1)">F</div>
+                <div class="chat-bubble">
+                  <span class="chat-sender" style="color: var(--color-actor-1)">Frontend</span>
+                  <p>Great! Metrics are ready. Showing dashboards to user now. ✨</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="chat-typing" id="chat-typing" style="display:none">
+              <div class="chat-avatar" id="typing-avatar">?</div>
+              <div class="chat-typing-dots">
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+                <span class="typing-dot"></span>
+              </div>
+            </div>
+
+            <div class="chat-controls">
+              <button onclick="playChatNext()">Next Message</button>
+              <button onclick="playChatAll()">Play All</button>
+              <button onclick="resetChat()">Replay</button>
+              <span class="chat-progress">0 / 7 messages</span>
+            </div>
+          </div>
+
+          <div class="callout callout-accent">
+            <div class="callout-icon">💡</div>
+            <div class="callout-content">
+              <strong class="callout-title">Key Insight: The Separation</strong>
+              <p>Notice how each component has ONE job. The connector talks to Jira. The engine calculates. The database stores. This is called <span class="term" data-definition="A design principle where each part of a system has a single, clear responsibility. It makes code easier to test, debug, and change.">separation of concerns</span>. If Jira changes their API, you only fix the connector, not the whole system.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Architecture in One Picture</h2>
+          <div class="icon-rows">
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-1)">🖥️</div>
+              <div>
+                <strong>Frontend (React)</strong>
+                <p>What you see: buttons, charts, forms. Runs in your browser. Built with React, TypeScript, Tailwind CSS. Shows dashboards, project wizard, settings.</p>
+              </div>
+            </div>
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-2)">⚙️</div>
+              <div>
+                <strong>Backend API (FastAPI)</strong>
+                <p>The server that does the thinking. Handles project creation, syncing, calculations. Built in Python, runs on your machine (or Docker).</p>
+              </div>
+            </div>
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-3)">🔗</div>
+              <div>
+                <strong>Connectors (Multiple)</strong>
+                <p>Bridges to external platforms. Each connector speaks one language: Jira, Trello, Azure DevOps, GitLab, CSV. Translates "Jira's Done = our Done stage."</p>
+              </div>
+            </div>
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-4)">📁</div>
+              <div>
+                <strong>Database (SQLite)</strong>
+                <p>A single file that stores everything: projects, work items, credentials (encrypted), metrics. No server needed — it's local and fast.</p>
+              </div>
+            </div>
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-5)">📈</div>
+              <div>
+                <strong>Flow Engine (Python)</strong>
+                <p>The math brain. Calculates throughput, cycle time, percentiles, Monte Carlo forecasts. Lives in the backend, runs after sync completes.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Where Does Your Data Go?</h2>
+          <p>Here's the honest truth: <strong>Your data never leaves your machine.</strong></p>
+          <p>Everything — projects, work items, metrics, encrypted credentials — is stored in a SQLite database file in `~/.oannes`. If you run Oannes in Docker, that's a volume you control. You own it. No cloud sync. No telemetry. No vendor lock-in.</p>
+          <p>This is by design. You're analyzing sensitive team data (how fast your team really works, who's bottlenecking work). That should never touch the internet.</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Quiz: Trace the Data</h2>
+          <div class="quiz-container">
+            <div class="quiz-question-block" data-question="q1" data-correct="option-a">
+              <h3 class="quiz-question">A work item is synced from Jira. Where does it go first?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Through the Jira connector, which translates platform-specific data</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Straight to the database, no translation</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q1-feedback"></div>
+            </div>
+
+            <div class="quiz-question-block" data-question="q2" data-correct="option-b">
+              <h3 class="quiz-question">Where is your Jira API token stored after you create a project?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>In the browser, in <span class="term" data-definition="A small file stored on your computer that the browser remembers between sessions. It's on your machine, not on the internet.">local storage</span>, unencrypted</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>In the SQLite database, encrypted with AES-128</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q2-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('module-2')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('module-2')">Try Again</button>
+            <div class="quiz-overall-feedback" id="module-2-overall"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULE 3: Meet the Connectors -->
+  <section class="module module-3" id="module-3">
+    <div class="module-content">
+      <header class="module-header animate-in">
+        <span class="module-number">03</span>
+        <h1 class="module-title">Meet the Connectors</h1>
+        <p class="module-subtitle">How Oannes speaks every platform's language</p>
+      </header>
+
+      <div class="module-body">
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Problem: Too Many Platforms</h2>
+          <p>Different teams use different platforms. One team uses Jira. Another uses Trello. Another uses Azure DevOps. And they all store work items differently.</p>
+          <p>Jira has <strong>Status</strong> fields. Trello has <strong>Columns</strong>. Azure DevOps has <strong>States</strong>. Same concept, different names.</p>
+          <p>A connector is a translator. It says: "I know how to talk to Jira. When I see a Jira issue with status = 'Done', that means this item is in the done stage."</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Connector Pattern (All Connectors Work This Way)</h2>
+          <div class="translation-block animate-in">
+            <div class="translation-code">
+              <span class="translation-label">CODE (Python)</span>
+              <pre><code><span class="code-keyword">class</span> <span class="code-function">BaseConnector</span>:
+    <span class="code-keyword">def</span> <span class="code-function">fetch_items</span>(self):
+        <span class="code-keyword">pass</span>
+    
+    <span class="code-keyword">def</span> <span class="code-function">map_to_stage</span>(self, status):
+        <span class="code-keyword">pass</span></code></pre>
+            </div>
+            <div class="translation-english">
+              <span class="translation-label">PLAIN ENGLISH</span>
+              <p class="tl">We define a base template that all connectors inherit from...</p>
+              <p class="tl">Every connector must implement "fetch items" — get data from the external service...</p>
+              <p class="tl">Every connector must implement "map to stage" — translate platform statuses into our standard stages (queue/in-flight/review/done)...</p>
+            </div>
+          </div>
+
+          <p>Once you understand this pattern, you understand all connectors:</p>
+          <div class="pattern-cards">
+            <div class="pattern-card">
+              <div class="pattern-icon">📥</div>
+              <div class="pattern-title">Fetch</div>
+              <div class="pattern-desc">Call the platform's API and get all work items</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🗺️</div>
+              <div class="pattern-title">Map</div>
+              <div class="pattern-desc">Translate platform-specific statuses to stages</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">✔️</div>
+              <div class="pattern-title">Normalize</div>
+              <div class="pattern-desc">Extract standard fields: created, started, done dates</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">💾</div>
+              <div class="pattern-title">Store</div>
+              <div class="pattern-desc">Save to database in a standard format</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Real Example: How Jira Connector Works</h2>
+          <p>When you create a Jira project in Oannes, you tell it: "When you see status = 'To Do', that's a queue item. When you see 'In Progress', that's in-flight. When you see 'Done', mark it done."</p>
+          <p>Then the Jira connector fetches your issues. For each issue, it:</p>
+          <div class="step-cards">
+            <div class="step-card">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <strong>Gets the created date</strong>
+                <p>When the issue was first created in Jira</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <strong>Finds the "started" moment</strong>
+                <p>When status first changed from "To Do" to something else (= work started)</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <strong>Finds the "done" moment</strong>
+                <p>When status became "Done" (= work completed)</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">4</div>
+              <div class="step-body">
+                <strong>Saves to database</strong>
+                <p>Stores all these dates plus the current stage</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout callout-accent">
+            <div class="callout-icon">💡</div>
+            <div class="callout-content">
+              <strong class="callout-title">Why This Matters for Predictions</strong>
+              <p>The flow engine needs these three dates (created, started, done) to calculate lead time and cycle time. A connector's job is to extract them accurately from each platform's messy, inconsistent data. Good connectors = good data = accurate forecasts.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">What Happens When a New Platform Arrives?</h2>
+          <p>A team says: "We want to use Linear instead of Jira." What does the team building Oannes do?</p>
+          <p>They write a <strong>Linear connector</strong> — a new class that implements the same pattern. Fetch items from Linear API. Map Linear's "Backlog/In Progress/Done" to our stages. Extract dates. Save to the same database format.</p>
+          <p>The rest of the system doesn't change. The frontend doesn't need to know about Linear. The flow engine doesn't care. The database schema is the same.</p>
+          <p>This is why the connector pattern is so powerful — you can add platforms without touching the rest of the codebase.</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Quiz: The Connector Abstraction</h2>
+          <div class="quiz-container">
+            <div class="quiz-question-block" data-question="q1" data-correct="option-b">
+              <h3 class="quiz-question">Why do connectors map to standard stages (queue/in-flight/review/done) instead of using each platform's native statuses?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Because it's simpler to code</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Because the flow engine needs a consistent format across all platforms to calculate metrics</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q1-feedback"></div>
+            </div>
+
+            <div class="quiz-question-block" data-question="q2" data-correct="option-a">
+              <h3 class="quiz-question">Oannes adds support for Linear. How much code changes in the flow engine?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>None — the flow engine only touches normalized database records</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>A lot — it needs to understand Linear's data format</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q2-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('module-3')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('module-3')">Try Again</button>
+            <div class="quiz-overall-feedback" id="module-3-overall"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULE 4: The Flow Metrics Engine -->
+  <section class="module module-4" id="module-4">
+    <div class="module-content">
+      <header class="module-header animate-in">
+        <span class="module-number">04</span>
+        <h1 class="module-title">The Flow Metrics Engine</h1>
+        <p class="module-subtitle">How numbers become predictions — the Troy Magennis methodology</p>
+      </header>
+
+      <div class="module-body">
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Magic Ingredient: Historical Data</h2>
+          <p>Oannes doesn't guess. It doesn't use best practices or industry benchmarks. It uses YOUR data.</p>
+          <p>Once your issues are synced, the flow engine has access to hundreds (or thousands) of completed items with real dates. This is a treasure trove for prediction.</p>
+          <p>The engine calculates eight metrics based on <span class="term" data-definition="A data-driven approach to predicting delivery timelines developed by Troy Magennis. It's based on measuring and analyzing how work actually flows through your team.">Troy Magennis's flow methodology</span>:</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Eight Metrics (One at a Time)</h2>
+          <div class="pattern-cards">
+            <div class="pattern-card">
+              <div class="pattern-icon">📊</div>
+              <div class="pattern-title">Throughput</div>
+              <div class="pattern-desc">Items completed per week, with trend line showing if you're speeding up or slowing down</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">⏱️</div>
+              <div class="pattern-title">Cycle Time</div>
+              <div class="pattern-desc">Days from work start to done (50th, 85th, 95th percentile)</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">📅</div>
+              <div class="pattern-title">Lead Time</div>
+              <div class="pattern-desc">Days from created to done (includes waiting in queue)</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">📈</div>
+              <div class="pattern-title">WIP (Work in Progress)</div>
+              <div class="pattern-desc">How many items actively being worked on right now</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🌊</div>
+              <div class="pattern-title">CFD (Cumulative Flow)</div>
+              <div class="pattern-desc">Stacked chart showing items in each stage over time — reveals bottlenecks</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">⚠️</div>
+              <div class="pattern-title">Aging WIP</div>
+              <div class="pattern-desc">Items stuck in progress longer than normal — red flags</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">⚙️</div>
+              <div class="pattern-title">Flow Efficiency</div>
+              <div class="pattern-desc">Ratio of active work time to total elapsed time</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🎲</div>
+              <div class="pattern-title">Monte Carlo</div>
+              <div class="pattern-desc">Probabilistic forecast: 70% confident you'll ship X items in Y weeks</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Example: Calculating Cycle Time Percentiles</h2>
+          <p>Let's say your team completed 100 items in the past month. Each item has a cycle time (days from start to done). The engine sorts them:</p>
+          <p style="font-family: var(--font-mono); background: var(--color-bg-code); color: #CDD6F4; padding: var(--space-4); border-radius: var(--radius-sm); word-break: break-word; white-space: pre-wrap;">
+            [2, 3, 3, 4, 4, 5, 5, 5, 6, 7, ... 22, 28, 31, 45]
+          </p>
+          <div class="translation-block animate-in">
+            <div class="translation-code">
+              <span class="translation-label">CODE (Python)</span>
+              <pre><code><span class="code-keyword">import</span> numpy <span class="code-keyword">as</span> np
+
+cycle_times = [2, 3, 3, 4, 4, 5, ...]
+p50 = np.percentile(cycle_times, 50)
+p85 = np.percentile(cycle_times, 85)
+p95 = np.percentile(cycle_times, 95)</code></pre>
+            </div>
+            <div class="translation-english">
+              <span class="translation-label">PLAIN ENGLISH</span>
+              <p class="tl">Import NumPy, a math library...</p>
+              <p class="tl">Give it the cycle times from all completed items...</p>
+              <p class="tl">Calculate the 50th percentile (median — half the items are faster, half slower)...</p>
+              <p class="tl">Calculate 85th percentile (this is what you should plan for — realistic)...</p>
+              <p class="tl">Calculate 95th percentile (worst case — use for risk planning)...</p>
+            </div>
+          </div>
+
+          <p>So if p50 = 5 days, p85 = 12 days, p95 = 25 days, you know:</p>
+          <ul style="margin: var(--space-4) 0; padding-left: var(--space-6);">
+            <li style="margin-bottom: var(--space-2)">Half your work gets done in 5 days or less</li>
+            <li style="margin-bottom: var(--space-2)">Most work (85% historically) is done in 12 days or less — use this for planning</li>
+            <li style="margin-bottom: var(--space-2)">Only the hardest 5% takes longer than 25 days</li>
+          </ul>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Bottleneck Detective: CFD</h2>
+          <p>The Cumulative Flow Diagram is a stacked area chart showing how many items are in each stage (queue, in-flight, review, done) over time.</p>
+          <p>If you see a flat line in the in-flight area while done items keep growing, that's great — items are moving through. But if the in-flight area gets thick and stops growing, items are stuck. That's your bottleneck.</p>
+          <div class="callout callout-accent">
+            <div class="callout-icon">💡</div>
+            <div class="callout-content">
+              <strong class="callout-title">The CFD Pattern</strong>
+              <p>In a healthy flow, the CFD looks like smooth diagonal lines stacking up. Queue grows, then items move to in-flight, then to done. If you see a horizontal band that's not growing, work is stuck there. Time to investigate.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Quiz: Reading the Metrics</h2>
+          <div class="quiz-container">
+            <div class="quiz-question-block" data-question="q1" data-correct="option-b">
+              <h3 class="quiz-question">Your cycle time p85 is 15 days, but you just committed to shipping a feature in 5 days. What does this mean?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>You're optimistic and it will probably work out</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Based on historical data, there's only a 15-20% chance of hitting that deadline</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q1-feedback"></div>
+            </div>
+
+            <div class="quiz-question-block" data-question="q2" data-correct="option-a">
+              <h3 class="quiz-question">Your CFD shows the "in-flight" band suddenly doubling in thickness. What's happening?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>More items are starting, but fewer are finishing — a bottleneck is forming</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Your team is being more productive</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q2-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('module-4')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('module-4')">Try Again</button>
+            <div class="quiz-overall-feedback" id="module-4-overall"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULE 5: Building the Dashboard -->
+  <section class="module module-5" id="module-5">
+    <div class="module-content">
+      <header class="module-header animate-in">
+        <span class="module-number">05</span>
+        <h1 class="module-title">Building the Dashboard</h1>
+        <p class="module-subtitle">From data to visual story — the frontend brings metrics to life</p>
+      </header>
+
+      <div class="module-body">
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Frontend's Job</h2>
+          <p>The backend has calculated metrics. They live in the database as numbers.</p>
+          <p>The frontend's job is to make those numbers mean something to humans. Charts. Tables. Cards showing at-a-glance insights.</p>
+          <p>When a user opens the dashboard, the frontend:</p>
+          <div class="step-cards">
+            <div class="step-card">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <strong>Asks the backend for metrics</strong>
+                <p>Via <span class="term" data-definition="A request sent from a browser to a server asking for data. Think of it like ordering from a menu — you request specific data (metrics for project X), and the server sends it back.">HTTP requests</span> to the <span class="term" data-definition="An endpoint is a specific URL that returns data when you ask it. Like '/api/projects/123/metrics' — a specific address for a specific piece of data.">API endpoints</span></p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <strong>Renders interactive charts</strong>
+                <p>Using <span class="term" data-definition="Plotly is a charting library that creates interactive, zoomable graphs. Users can hover to see exact values, click to zoom in, etc.">Plotly</span>, making beautiful, zoomable graphs</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <strong>Caches the data smartly</strong>
+                <p>Using <span class="term" data-definition="TanStack Query is a library that manages fetching and caching data from servers, so you don't fetch the same data twice.">TanStack Query</span> to avoid refetching the same metrics repeatedly</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Tech Stack: React + TypeScript + Plotly</h2>
+          <div class="translation-block animate-in">
+            <div class="translation-code">
+              <span class="translation-label">CODE (React/TypeScript)</span>
+              <pre><code><span class="code-keyword">const</span> {data} = <span class="code-function">useThroughputMetrics</span>(projectId);
+
+<span class="code-keyword">return</span> (
+  &lt;<span class="code-tag">Plot</span>
+    data={data}
+    layout={{ title: <span class="code-string">'Weekly Throughput'</span> }}
+  /&gt;
+);</code></pre>
+            </div>
+            <div class="translation-english">
+              <span class="translation-label">PLAIN ENGLISH</span>
+              <p class="tl">Use the "useThroughputMetrics" hook (a reusable function that fetches metrics for this project)...</p>
+              <p class="tl">Return a Plotly chart component...</p>
+              <p class="tl">Pass the metrics data to the chart...</p>
+              <p class="tl">Give it a title so users know what they're looking at...</p>
+            </div>
+          </div>
+
+          <p><strong>Why this stack?</strong></p>
+          <div class="pattern-cards">
+            <div class="pattern-card">
+              <div class="pattern-icon">⚛️</div>
+              <div class="pattern-title">React</div>
+              <div class="pattern-desc">Builds interactive UIs that update smoothly when data changes</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🔒</div>
+              <div class="pattern-title">TypeScript</div>
+              <div class="pattern-desc">Catches bugs early by checking data types (metrics should be numbers, not text)</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">📊</div>
+              <div class="pattern-title">Plotly</div>
+              <div class="pattern-desc">Creates beautiful, interactive charts that users can explore</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">⚡</div>
+              <div class="pattern-title">Vite</div>
+              <div class="pattern-desc">Lightning-fast development and build process</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Data Flow: Dashboard Refresh</h2>
+          <p>When the user opens the dashboard, here's what happens:</p>
+          <div class="flow-animation">
+            <div class="flow-actors">
+              <div class="flow-actor" id="flow-actor-1">
+                <div class="flow-actor-icon">B</div>
+                <span>Browser</span>
+              </div>
+              <div class="flow-actor" id="flow-actor-2">
+                <div class="flow-actor-icon">A</div>
+                <span>API</span>
+              </div>
+              <div class="flow-actor" id="flow-actor-3">
+                <div class="flow-actor-icon">D</div>
+                <span>Database</span>
+              </div>
+              <div class="flow-actor" id="flow-actor-4">
+                <div class="flow-actor-icon">C</div>
+                <span>Chart</span>
+              </div>
+            </div>
+
+            <div class="flow-step-label" id="flow-label">Click next to see the journey</div>
+
+            <div class="flow-controls">
+              <button onclick="flowNext()">Next Step</button>
+              <button onclick="flowReset()">Restart</button>
+              <span class="flow-progress">Step 0 / 4</span>
+            </div>
+          </div>
+
+          <script>
+            const flowSteps = [
+              { highlight: 'actor-1', label: 'User loads dashboard in React' },
+              { highlight: 'actor-2', label: 'Frontend asks API for metrics: GET /api/projects/123/metrics' },
+              { highlight: 'actor-3', label: 'API queries database for pre-calculated metrics' },
+              { highlight: 'actor-1', label: 'API returns JSON. React renders Plotly chart. User sees beautiful graph!' }
+            ];
+            let flowStep = 0;
+            window.flowNext = function() {
+              if (flowStep >= flowSteps.length) return;
+              const step = flowSteps[flowStep];
+              document.querySelectorAll('.flow-actor').forEach(a => a.classList.remove('active'));
+              document.getElementById(`flow-${step.highlight}`).classList.add('active');
+              document.getElementById('flow-label').textContent = step.label;
+              document.querySelector('.flow-progress').textContent = `Step ${flowStep + 1} / ${flowSteps.length}`;
+              flowStep++;
+            };
+            window.flowReset = function() { flowStep = 0; document.getElementById('flow-label').textContent = 'Click next to see the journey'; document.querySelectorAll('.flow-actor').forEach(a => a.classList.remove('active')); document.querySelector('.flow-progress').textContent = `Step 0 / ${flowSteps.length}`; };
+          </script>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Making Dashboards Smart: Caching</h2>
+          <p>Every time the user switches tabs, metrics shouldn't refetch. That's wasteful. TanStack Query caches the data.</p>
+          <p><strong>First visit to dashboard:</strong> fetch from server, render chart, cache it.</p>
+          <p><strong>Second visit (within 5 minutes):</strong> show cached version instantly. In the background, silently refetch fresh data. When it arrives, update the chart without interrupting the user.</p>
+          <p>This is called <span class="term" data-definition="A strategy where you show the user cached data immediately (fast!), then quietly fetch fresh data in the background and update the display when it arrives. Best of both worlds: speed + freshness.">stale-while-revalidate</span>.</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Quiz: Frontend Thinking</h2>
+          <div class="quiz-container">
+            <div class="quiz-question-block" data-question="q1" data-correct="option-a">
+              <h3 class="quiz-question">Why does the frontend use TanStack Query to cache metrics?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>To avoid fetching the same data multiple times, speeding up the user experience</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Because the database can't handle multiple requests</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q1-feedback"></div>
+            </div>
+
+            <div class="quiz-question-block" data-question="q2" data-correct="option-b">
+              <h3 class="quiz-question">You're designing a chart that shows cycle time percentiles. What data should come from the backend?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>All 1,000 individual cycle times, so the frontend can calculate percentiles</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Just the p50, p85, p95 values — the heavy math already happened</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q2-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('module-5')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('module-5')">Try Again</button>
+            <div class="quiz-overall-feedback" id="module-5-overall"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULE 6: Predicting the Future -->
+  <section class="module module-6" id="module-6">
+    <div class="module-content">
+      <header class="module-header animate-in">
+        <span class="module-number">06</span>
+        <h1 class="module-title">Predicting the Future</h1>
+        <p class="module-subtitle">Monte Carlo simulation — the most powerful metric Oannes offers</p>
+      </header>
+
+      <div class="module-body">
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Question Nobody Can Answer</h2>
+          <p><strong>"When will we ship 50 items?"</strong></p>
+          <p>It's a fair question. You have 50 items in the backlog. Your team completes 8 items per week. Math says: 50 ÷ 8 = 6.25 weeks, right?</p>
+          <p>Wrong. That assumes perfect consistency. Real teams are messier. Some weeks you do 6, some weeks you do 10. Some items are hard, some are easy.</p>
+          <p>Monte Carlo simulation handles that messiness. It says: "Based on your historical variability, here are the probabilities."</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">How Monte Carlo Works (Simplified)</h2>
+          <p>Imagine a lottery machine with balls labeled with your past weekly throughputs: [5, 6, 6, 7, 8, 8, 8, 9, 10, 12].</p>
+          <p>The simulation runs 10,000 times:</p>
+          <div class="step-cards">
+            <div class="step-card">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <strong>Draw a random ball</strong>
+                <p>Pick one of your historical weekly throughputs at random</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <strong>Add it to the total</strong>
+                <p>You've completed that many items this week</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <strong>Repeat until you hit 50</strong>
+                <p>Keep drawing and summing until your total reaches 50</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">4</div>
+              <div class="step-body">
+                <strong>Count how many weeks it took</strong>
+                <p>This is one simulated scenario</p>
+              </div>
+            </div>
+          </div>
+
+          <p>Do this 10,000 times. Sometimes it took 5 weeks, sometimes 7, sometimes 8. When you plot all 10,000 results, you get a distribution:</p>
+          <ul style="margin: var(--space-4) 0; padding-left: var(--space-6);">
+            <li style="margin-bottom: var(--space-2)"><strong>5% chance:</strong> 4 weeks (you got lucky)</li>
+            <li style="margin-bottom: var(--space-2)"><strong>25% chance:</strong> 5 weeks</li>
+            <li style="margin-bottom: var(--space-2)"><strong>50% chance:</strong> 6 weeks (median)</li>
+            <li style="margin-bottom: var(--space-2)"><strong>85% chance:</strong> 7 weeks (use this for planning)</li>
+            <li style="margin-bottom: var(--space-2)"><strong>95% chance:</strong> 9 weeks (risk planning)</li>
+          </ul>
+
+          <div class="callout callout-accent">
+            <div class="callout-icon">💡</div>
+            <div class="callout-content">
+              <strong class="callout-title">Why 85%?</strong>
+              <p>In project management, the 85th percentile is the sweet spot. It's ambitious but achievable. You're accounting for the variability in your real work, not hoping for perfection.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">How Oannes Implements Monte Carlo</h2>
+          <div class="translation-block animate-in">
+            <div class="translation-code">
+              <span class="translation-label">CODE (Python)</span>
+              <pre><code><span class="code-keyword">def</span> <span class="code-function">monte_carlo</span>(throughput_history, target):
+    results = []
+    <span class="code-keyword">for</span> _ <span class="code-keyword">in</span> <span class="code-keyword">range</span>(10000):
+        total = 0
+        weeks = 0
+        <span class="code-keyword">while</span> total &lt; target:
+            weekly = np.random.choice(
+              throughput_history)
+            total += weekly
+            weeks += 1
+        results.append(weeks)
+    <span class="code-keyword">return</span> results</code></pre>
+            </div>
+            <div class="translation-english">
+              <span class="translation-label">PLAIN ENGLISH</span>
+              <p class="tl">Define a function that takes historical throughput and a target (50 items)...</p>
+              <p class="tl">Create an empty list to store results...</p>
+              <p class="tl">Run 10,000 simulations...</p>
+              <p class="tl">For each simulation, start with 0 items completed...</p>
+              <p class="tl">Keep adding random weeks of throughput...</p>
+              <p class="tl">When you reach the target, record how many weeks it took...</p>
+              <p class="tl">Return all 10,000 results...</p>
+            </div>
+          </div>
+
+          <p>The beauty of this approach is it uses your actual data. Your team's actual variability. Your actual patterns. Not someone's formula from a management book.</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Real Power: Risk Conversations</h2>
+          <p>Oannes gives you language for tough conversations:</p>
+          <p><strong>PM:</strong> "When can we ship?"</p>
+          <p><strong>You:</strong> "Oannes says 85% chance in 7 weeks. That's based on our actual 3-month history, not guessing."</p>
+          <p><strong>PM:</strong> "What if we need it in 5 weeks?"</p>
+          <p><strong>You:</strong> "That's the 25th percentile. 75% chance we miss it. We could hire someone, remove some scope, or accept the risk."</p>
+          <p>No emotion. Just probabilities. That's powerful.</p>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Quiz: Using Predictions</h2>
+          <div class="quiz-container">
+            <div class="quiz-question-block" data-question="q1" data-correct="option-b">
+              <h3 class="quiz-question">Your Monte Carlo forecast says 85% chance you'll ship 40 items in 6 weeks. What should you tell a stakeholder asking for a deadline?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>"We'll ship in 6 weeks for sure"</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>"85% confident we'll ship 40+ items in 6 weeks. 15% risk we miss it."</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q1-feedback"></div>
+            </div>
+
+            <div class="quiz-question-block" data-question="q2" data-correct="option-a">
+              <h3 class="quiz-question">Your throughput has been steady: [8, 8, 9, 8, 8, 9, 8] items per week. You're asked to ship 50 items. What prediction is most accurate?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>50 ÷ 8 = 6.25 weeks is a very reliable prediction (you're consistent)</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>Monte Carlo says 6 weeks because it over-estimates with small samples</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q2-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('module-6')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('module-6')">Try Again</button>
+            <div class="quiz-overall-feedback" id="module-6-overall"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODULE 7: Putting It All Together -->
+  <section class="module module-7" id="module-7">
+    <div class="module-content">
+      <header class="module-header animate-in">
+        <span class="module-number">07</span>
+        <h1 class="module-title">Putting It All Together</h1>
+        <p class="module-subtitle">How to steer AI to build better tools like this</p>
+      </header>
+
+      <div class="module-body">
+        <section class="screen animate-in">
+          <h2 class="screen-heading">You Now Know How Oannes Works</h2>
+          <p>You've seen every layer:</p>
+          <div class="icon-rows">
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-1)">1️⃣</div>
+              <div>
+                <strong>Connectors</strong>
+                <p>Speak every platform's language, translate to standard stages, extract dates</p>
+              </div>
+            </div>
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-2)">2️⃣</div>
+              <div>
+                <strong>Database</strong>
+                <p>Stores work items and encrypted credentials in a local SQLite file</p>
+              </div>
+            </div>
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-3)">3️⃣</div>
+              <div>
+                <strong>Flow Engine</strong>
+                <p>Calculates metrics (throughput, cycle time, CFD, Monte Carlo) from historical data</p>
+              </div>
+            </div>
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-4)">4️⃣</div>
+              <div>
+                <strong>API</strong>
+                <p>REST endpoints that expose metrics to the frontend</p>
+              </div>
+            </div>
+            <div class="icon-row">
+              <div class="icon-circle" style="background: var(--color-actor-5)">5️⃣</div>
+              <div>
+                <strong>Frontend</strong>
+                <p>Beautiful, interactive dashboards showing metrics and insights</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">The Design Principles You've Seen</h2>
+          <p>Every piece of Oannes reflects careful thinking:</p>
+          <div class="pattern-cards">
+            <div class="pattern-card" style="border-top: 3px solid var(--color-actor-2)">
+              <div class="pattern-icon" style="background: var(--color-actor-2)">🎯</div>
+              <div class="pattern-title">Separation of Concerns</div>
+              <div class="pattern-desc">Each component has ONE job. Frontend doesn't know how metrics are calculated. Engine doesn't know how to draw charts.</div>
+            </div>
+            <div class="pattern-card" style="border-top: 3px solid var(--color-actor-3)">
+              <div class="pattern-icon" style="background: var(--color-actor-3)">🔐</div>
+              <div class="pattern-title">Security by Default</div>
+              <div class="pattern-desc">Credentials encrypted at rest. No cloud sync. Data never leaves your machine unless you choose to share.</div>
+            </div>
+            <div class="pattern-card" style="border-top: 3px solid var(--color-actor-4)">
+              <div class="pattern-icon" style="background: var(--color-actor-4)">📊</div>
+              <div class="pattern-title">Data-Driven (Not Opinion-Driven)</div>
+              <div class="pattern-desc">Every prediction is based on YOUR historical data, not best practices or industry benchmarks.</div>
+            </div>
+            <div class="pattern-card" style="border-top: 3px solid var(--color-actor-5)">
+              <div class="pattern-icon" style="background: var(--color-actor-5)">🔄</div>
+              <div class="pattern-title">Extensible Architecture</div>
+              <div class="pattern-desc">Add a new platform? Write a new connector. The rest of the system stays the same. No cascading rewrites.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">How to Steer AI (When Building Tools Like This)</h2>
+          <p>Now that you understand how Oannes works, here's how you'd tell an AI assistant to improve it:</p>
+          <div class="step-cards">
+            <div class="step-card">
+              <div class="step-num">1</div>
+              <div class="step-body">
+                <strong>Name the component, not the symptom</strong>
+                <p>Instead of "the forecasting is wrong," say "The Monte Carlo simulation needs vectorized NumPy calculations to handle large datasets faster."</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">2</div>
+              <div class="step-body">
+                <strong>Respect separation of concerns</strong>
+                <p>Instead of "add forecasting to the frontend," say "Add a new API endpoint for forecasts, then the frontend can display them."</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">3</div>
+              <div class="step-body">
+                <strong>Propose patterns, not hacks</strong>
+                <p>Instead of "let's use caching somehow," say "Implement stale-while-revalidate caching with TanStack Query."</p>
+              </div>
+            </div>
+            <div class="step-card">
+              <div class="step-num">4</div>
+              <div class="step-body">
+                <strong>Think about data flow</strong>
+                <p>Where does data enter the system? How does it transform? Where does it exit? Draw it if you have to.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout callout-accent">
+            <div class="callout-icon">💡</div>
+            <div class="callout-content">
+              <strong class="callout-title">The Meta-Skill</strong>
+              <p>The most valuable skill for working with AI coding assistants is understanding architecture. You just learned Oannes's architecture. That knowledge lets you ask for the right changes, catch hallucinations, and avoid obvious mistakes. That's what separates "I followed an AI's directions" from "I steered AI to build something good."</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">What You Can Do Now</h2>
+          <p>You understand Oannes end-to-end. You can:</p>
+          <div class="pattern-cards">
+            <div class="pattern-card">
+              <div class="pattern-icon">🐛</div>
+              <div class="pattern-title">Debug smarter</div>
+              <div class="pattern-desc">When something breaks, you know which layer to investigate first</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🚀</div>
+              <div class="pattern-title">Add features wisely</div>
+              <div class="pattern-desc">You know how data flows, so you can spot where to inject new functionality without breaking things</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🤖</div>
+              <div class="pattern-title">Direct AI effectively</div>
+              <div class="pattern-desc">You can tell an AI assistant exactly where a change belongs and why, using precise language</div>
+            </div>
+            <div class="pattern-card">
+              <div class="pattern-icon">🎯</div>
+              <div class="pattern-title">Catch mistakes early</div>
+              <div class="pattern-desc">When an AI suggests something that violates the architecture, you'll spot it</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">Final Quiz: Architecture Thinking</h2>
+          <div class="quiz-container">
+            <div class="quiz-question-block" data-question="q1" data-correct="option-a">
+              <h3 class="quiz-question">You want to add support for a new platform (e.g., Shortcut). Where's the ONLY place you need to write code?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>A new Shortcut connector class that implements the standard interface</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>The connector, the database schema, the API endpoints, and the frontend — everything</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q1-feedback"></div>
+            </div>
+
+            <div class="quiz-question-block" data-question="q2" data-correct="option-a">
+              <h3 class="quiz-question">An AI assistant proposes: "Let's add forecasting logic directly to the React frontend components." How should you respond?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>"No, let's create an API endpoint for forecasts, then have the frontend display the results"</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>"Sure, the frontend is the best place for heavy math"</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q2-feedback"></div>
+            </div>
+
+            <div class="quiz-question-block" data-question="q3" data-correct="option-b">
+              <h3 class="quiz-question">You realize the flow metrics engine makes a calculation error. Where should you TEST the fix?</h3>
+              <div class="quiz-options">
+                <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>In the React frontend, with a mock dashboard</span>
+                </button>
+                <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                  <div class="quiz-option-radio"></div>
+                  <span>In unit tests in the backend, using test data and assertions</span>
+                </button>
+              </div>
+              <div class="quiz-feedback" id="q3-feedback"></div>
+            </div>
+
+            <button class="quiz-check-btn" onclick="checkQuiz('module-7')">Check Answers</button>
+            <button class="quiz-reset-btn" onclick="resetQuiz('module-7')">Try Again</button>
+            <div class="quiz-overall-feedback" id="module-7-overall"></div>
+          </div>
+        </section>
+
+        <section class="screen animate-in">
+          <h2 class="screen-heading">You're Ready</h2>
+          <p>You now understand how Oannes works from first principles. You know:</p>
+          <ul style="margin: var(--space-4) 0; padding-left: var(--space-6);">
+            <li style="margin-bottom: var(--space-2)">How data flows from issue tracker → connector → database → engine → API → dashboard</li>
+            <li style="margin-bottom: var(--space-2)">How each layer has a single responsibility</li>
+            <li style="margin-bottom: var(--space-2)">How the flow metrics tell you what's really happening in your team</li>
+            <li style="margin-bottom: var(--space-2)">How to use this knowledge to make better decisions with AI</li>
+          </ul>
+          <p style="margin-top: var(--space-6); font-size: var(--text-lg); font-weight: 600; color: var(--color-accent);">Now go build something great. 🚀</p>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Initialize scroll spy and progress bar
+    const nav = document.querySelector('.nav');
+    const progressBar = document.querySelector('.progress-bar');
+    const navDots = document.querySelectorAll('.nav-dot');
+
+    function updateProgressBar() {
+      const scrollTop = window.scrollY;
+      const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = (scrollTop / scrollHeight) * 100;
+      progressBar.style.width = progress + '%';
+    }
+
+    function updateNavDots() {
+      let currentModule = null;
+      const modules = document.querySelectorAll('.module');
+
+      modules.forEach((module, index) => {
+        const rect = module.getBoundingClientRect();
+        if (rect.top <= window.innerHeight / 2) {
+          currentModule = index;
+        }
+      });
+
+      navDots.forEach((dot, index) => {
+        dot.classList.remove('current');
+        if (index < currentModule) {
+          dot.classList.add('visited');
+        } else {
+          dot.classList.remove('visited');
+        }
+      });
+
+      if (currentModule !== null && currentModule < navDots.length) {
+        navDots[currentModule].classList.add('current');
+      }
+    }
+
+    window.addEventListener('scroll', () => {
+      requestAnimationFrame(() => {
+        updateProgressBar();
+        updateNavDots();
+      });
+    }, { passive: true });
+
+    // Intersection Observer for scroll-triggered animations
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.1 });
+
+    document.querySelectorAll('.animate-in').forEach(el => observer.observe(el));
+
+    // Nav dot click navigation
+    navDots.forEach((dot, index) => {
+      dot.addEventListener('click', () => {
+        const moduleId = `module-${index + 1}`;
+        const element = document.getElementById(moduleId);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        window.scrollBy({ top: window.innerHeight, behavior: 'smooth' });
+        e.preventDefault();
+      }
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        window.scrollBy({ top: -window.innerHeight, behavior: 'smooth' });
+        e.preventDefault();
+      }
+    });
+
+    // Chat Animation
+    let chatIndex = 0;
+    const chatMessages = document.querySelectorAll('#chat-messages .chat-message');
+
+    window.playChatNext = function() {
+      if (chatIndex >= chatMessages.length) return;
+      const msg = chatMessages[chatIndex];
+      const sender = msg.dataset.sender;
+
+      const typing = document.getElementById('chat-typing');
+      const avatar = document.getElementById('typing-avatar');
+      avatar.textContent = sender === 'actor-1' ? 'F' : sender === 'actor-2' ? 'C' : sender === 'actor-3' ? 'J' : sender === 'actor-4' ? 'D' : 'E';
+      avatar.style.background = getComputedStyle(document.documentElement).getPropertyValue(`--color-${sender}`);
+      typing.style.display = 'flex';
+
+      setTimeout(() => {
+        typing.style.display = 'none';
+        msg.style.display = 'flex';
+        chatIndex++;
+        document.querySelector('.chat-progress').textContent = `${chatIndex} / ${chatMessages.length} messages`;
+      }, 800);
+    };
+
+    window.playChatAll = function() {
+      const interval = setInterval(() => {
+        if (chatIndex >= chatMessages.length) { clearInterval(interval); return; }
+        playChatNext();
+      }, 1200);
+    };
+
+    window.resetChat = function() {
+      chatIndex = 0;
+      chatMessages.forEach(msg => msg.style.display = 'none');
+      document.getElementById('chat-typing').style.display = 'none';
+      document.querySelector('.chat-progress').textContent = `0 / ${chatMessages.length} messages`;
+    };
+
+    // Quiz logic
+    window.selectOption = function(btn) {
+      const block = btn.closest('.quiz-question-block');
+      block.querySelectorAll('.quiz-option').forEach(o => o.classList.remove('selected'));
+      btn.classList.add('selected');
+    };
+
+    window.checkQuiz = function(sectionId) {
+      const container = document.querySelector(`#${sectionId} .quiz-container`);
+      const questions = container.querySelectorAll('.quiz-question-block');
+      let correct = 0;
+
+      questions.forEach(q => {
+        const selected = q.querySelector('.quiz-option.selected');
+        const feedback = q.querySelector('.quiz-feedback');
+        const correctValue = q.dataset.correct;
+
+        if (!selected) {
+          feedback.textContent = 'Pick an answer first!';
+          feedback.className = 'quiz-feedback show warning';
+          return;
+        }
+
+        if (selected.dataset.value === correctValue) {
+          correct++;
+          selected.classList.add('correct');
+          const explanation = selected.getAttribute('data-explanation') || 'Great thinking!';
+          feedback.innerHTML = '<strong>Exactly!</strong> ' + explanation;
+          feedback.className = 'quiz-feedback show success';
+        } else {
+          selected.classList.add('incorrect');
+          q.querySelector(`[data-value="${correctValue}"]`).classList.add('correct');
+          const explanation = q.querySelector(`[data-value="${correctValue}"]`).getAttribute('data-explanation') || 'This is the better answer.';
+          feedback.innerHTML = '<strong>Not quite.</strong> ' + explanation;
+          feedback.className = 'quiz-feedback show error';
+        }
+
+        q.querySelectorAll('.quiz-option').forEach(o => o.disabled = true);
+      });
+
+      const overall = container.querySelector('.quiz-overall-feedback');
+      overall.textContent = `You got ${correct} / ${questions.length} correct!`;
+      overall.className = 'quiz-overall-feedback ' + (correct === questions.length ? 'success' : 'error');
+    };
+
+    window.resetQuiz = function(sectionId) {
+      const container = document.querySelector(`#${sectionId} .quiz-container`);
+      container.querySelectorAll('.quiz-option').forEach(o => {
+        o.classList.remove('selected', 'correct', 'incorrect');
+        o.disabled = false;
+      });
+      container.querySelectorAll('.quiz-feedback').forEach(f => {
+        f.textContent = '';
+        f.className = 'quiz-feedback';
+      });
+      container.querySelector('.quiz-overall-feedback').textContent = '';
+    };
+
+    // Tooltip system
+    let activeTooltip = null;
+
+    function positionTooltip(term, tip) {
+      const rect = term.getBoundingClientRect();
+      const tipWidth = 300;
+      let left = rect.left + rect.width / 2 - tipWidth / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - tipWidth - 8));
+
+      document.body.appendChild(tip);
+      const tipHeight = tip.offsetHeight;
+
+      if (rect.top - tipHeight - 8 < 0) {
+        tip.style.top = (rect.bottom + 8) + 'px';
+        tip.classList.add('flip');
+      } else {
+        tip.style.top = (rect.top - tipHeight - 8) + 'px';
+        tip.classList.remove('flip');
+      }
+
+      tip.style.left = left + 'px';
+    }
+
+    document.querySelectorAll('.term').forEach(term => {
+      const tip = document.createElement('span');
+      tip.className = 'term-tooltip';
+      tip.textContent = term.dataset.definition;
+
+      term.addEventListener('mouseenter', () => {
+        if (activeTooltip && activeTooltip !== tip) {
+          activeTooltip.classList.remove('visible');
+          activeTooltip.remove();
+        }
+        positionTooltip(term, tip);
+        requestAnimationFrame(() => tip.classList.add('visible'));
+        activeTooltip = tip;
+      });
+
+      term.addEventListener('mouseleave', () => {
+        tip.classList.remove('visible');
+        setTimeout(() => { if (!tip.classList.contains('visible')) tip.remove(); }, 150);
+        activeTooltip = null;
+      });
+
+      term.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (activeTooltip && activeTooltip !== tip) {
+          activeTooltip.classList.remove('visible');
+          activeTooltip.remove();
+        }
+        if (tip.classList.contains('visible')) {
+          tip.classList.remove('visible');
+          tip.remove();
+          activeTooltip = null;
+        } else {
+          positionTooltip(term, tip);
+          requestAnimationFrame(() => tip.classList.add('visible'));
+          activeTooltip = tip;
+        }
+      });
+    });
+
+    document.addEventListener('click', () => {
+      if (activeTooltip) {
+        activeTooltip.classList.remove('visible');
+        activeTooltip.remove();
+        activeTooltip = null;
+      }
+    });
+
+    // Initialize
+    updateProgressBar();
+    updateNavDots();
+  </script>
+</body>
+</html>

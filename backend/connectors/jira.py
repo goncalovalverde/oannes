@@ -7,6 +7,9 @@ from jira import JIRAError
 
 logger = logging.getLogger(__name__)
 
+# Enable debug logging for requests library to see HTTP headers/responses
+logging.getLogger("urllib3").setLevel(logging.DEBUG)
+
 
 def _format_jira_error(error: Exception, context: str = "") -> str:
     """Format Jira errors into user-friendly messages.
@@ -20,8 +23,11 @@ def _format_jira_error(error: Exception, context: str = "") -> str:
     """
     error_str = str(error)
     
+    logger.debug(f"Formatting error: {type(error).__name__}: {error_str}")
+    
     if isinstance(error, JIRAError):
         status = getattr(error, 'status_code', None)
+        logger.debug(f"JIRAError with status {status}")
         
         if status == 401:
             return (
@@ -93,13 +99,45 @@ class JiraConnector(BaseConnector):
         super().__init__(config, workflow_steps)
         self._jira = None
 
+    def _get_auth_headers(self) -> dict:
+        """Return auth headers based on auth type (PAT or API token)."""
+        auth_type = self.config.get("auth_type", "api_token")
+        logger.debug(f"[Jira Auth] Using auth_type: {auth_type}")
+        
+        if auth_type == "personal_access_token":
+            # PAT uses Bearer token
+            pat = self.config.get('personal_access_token', '')
+            logger.debug(f"[Jira Auth] PAT mode - token length: {len(pat)}")
+            return {"Authorization": f"Bearer {pat}"}
+        # Default: API token uses basic auth
+        logger.debug("[Jira Auth] API token mode (Basic Auth)")
+        return {}
+
     def _get_client(self):
         if self._jira is None:
             from jira import JIRA
-            self._jira = JIRA(
-                server=self.config["url"],
-                basic_auth=(self.config["email"], self.config["api_token"])
-            )
+            
+            auth_type = self.config.get("auth_type", "api_token")
+            logger.debug(f"[Jira Client] Initializing with auth_type: {auth_type}")
+            
+            if auth_type == "personal_access_token":
+                # For PAT, we can't use the jira library's basic_auth
+                # Just create a dummy JIRA client; we'll use requests for actual calls
+                # The jira library still expects some form of auth for initialization
+                logger.debug(f"[Jira Client] Creating JIRA client for PAT (will use requests directly)")
+                self._jira = JIRA(
+                    server=self.config["url"],
+                    options={"agile_rest_path": "agile"}
+                )
+            else:
+                # API token auth
+                email = self.config.get("email", "")
+                token = self.config.get("api_token", "")
+                logger.debug(f"[Jira Client] Creating JIRA client with API token (email: {email}, token length: {len(token)})")
+                self._jira = JIRA(
+                    server=self.config["url"],
+                    basic_auth=(email, token)
+                )
         return self._jira
 
     def _search_issues_v3(self, jql: str, start: int, batch: int) -> dict:
@@ -116,14 +154,42 @@ class JiraConnector(BaseConnector):
             "expand": "changelog",
             "fields": "*all",
         }
-        resp = requests.get(
-            url,
-            params=params,
-            auth=(self.config["email"], self.config["api_token"]),
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        
+        # Prepare auth based on auth type
+        headers = {}
+        auth = None
+        
+        auth_type = self.config.get("auth_type", "api_token")
+        logger.debug(f"[Jira Search] URL: {url}")
+        logger.debug(f"[Jira Search] Auth type: {auth_type}")
+        
+        if auth_type == "personal_access_token":
+            # PAT uses Bearer token
+            pat = self.config.get("personal_access_token", "")
+            logger.debug(f"[Jira Search] Using Bearer token (length: {len(pat)})")
+            headers = {"Authorization": f"Bearer {pat}"}
+        else:
+            # API token uses basic auth
+            email = self.config.get("email", "")
+            logger.debug(f"[Jira Search] Using basic auth with email: {email}")
+            auth = (email, self.config.get("api_token", ""))
+        
+        logger.debug(f"[Jira Search] Making request to {url}...")
+        try:
+            resp = requests.get(
+                url,
+                params=params,
+                auth=auth,
+                headers=headers if headers else None,
+                timeout=30,
+                allow_redirects=True,
+            )
+            logger.debug(f"[Jira Search] Response status: {resp.status_code}")
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.error(f"[Jira Search] Request failed: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
 
         # Surface any Jira application-level errors embedded in a 200 response
         if "errorMessages" in data and data["errorMessages"]:
@@ -132,17 +198,57 @@ class JiraConnector(BaseConnector):
         return data
 
     def test_connection(self) -> dict:
+        logger.info(f"[Jira Test] Starting connection test with auth_type: {self.config.get('auth_type')}")
+        logger.debug(f"[Jira Test] URL: {self.config.get('url')}")
         try:
-            jira = self._get_client()
-            projects = jira.projects()
-            return {
-                "success": True,
-                "message": f"Connected successfully. Found {len(projects)} projects.",
-                "boards": [{"id": p.key, "name": p.name} for p in projects]
-            }
+            auth_type = self.config.get("auth_type", "api_token")
+            
+            if auth_type == "personal_access_token":
+                # For PAT, try Bearer token with allow_redirects
+                logger.debug("[Jira Test] Using PAT token with Bearer authorization")
+                url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
+                pat = self.config.get('personal_access_token', '')
+                
+                # Try Bearer token - allow redirects
+                headers = {"Authorization": f"Bearer {pat}"}
+                logger.debug("[Jira Test] Sending request with Bearer token (allowing redirects)")
+                resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+                logger.debug(f"[Jira Test] Response status: {resp.status_code}")
+                logger.debug(f"[Jira Test] Response headers: {dict(resp.headers)}")
+                
+                if resp.status_code not in [200, 401]:
+                    logger.debug(f"[Jira Test] Response text (first 500 chars): {resp.text[:500]}")
+                
+                resp.raise_for_status()
+                user = resp.json()
+                logger.info(f"[Jira Test] ✅ Authenticated as: {user.get('displayName', 'Unknown')}")
+                
+                # Now fetch projects with same auth method
+                url = f"{self.config['url'].rstrip('/')}/rest/api/3/projects"
+                resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+                resp.raise_for_status()
+                data = resp.json()
+                projects = data.get('values', [])
+                
+                return {
+                    "success": True,
+                    "message": f"Connected successfully. Found {len(projects)} projects.",
+                    "boards": [{"id": p.get("key"), "name": p.get("name")} for p in projects]
+                }
+            else:
+                # API token auth - use jira library
+                logger.debug("[Jira Test] Using JIRA library for API token")
+                jira = self._get_client()
+                projects = jira.projects()
+                logger.info(f"[Jira Test] ✅ Connected successfully. Found {len(projects)} projects")
+                return {
+                    "success": True,
+                    "message": f"Connected successfully. Found {len(projects)} projects.",
+                    "boards": [{"id": p.key, "name": p.name} for p in projects]
+                }
         except Exception as e:
             user_message = _format_jira_error(e, context="during connection test")
-            logger.error(f"Jira connection error: {e}", exc_info=True)
+            logger.error(f"[Jira Test] ❌ Connection failed: {type(e).__name__}: {str(e)}", exc_info=True)
             return {"success": False, "message": user_message, "boards": []}
 
     def discover_statuses(self, board_id: str) -> list:

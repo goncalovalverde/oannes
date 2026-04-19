@@ -5,9 +5,17 @@ from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import os
 import logging
+import sys
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging with detailed format for debugging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
 logger = logging.getLogger(__name__)
+logger.info("🚀 Oannes Backend Starting (DEBUG mode enabled)")
+
 
 
 @asynccontextmanager
