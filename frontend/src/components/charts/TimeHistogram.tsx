@@ -19,9 +19,9 @@ export default function TimeHistogram({ data, field, p50, p85, p95 }: Props) {
   const traces: Plotly.Data[] = [{
     type: 'histogram', x: values, name: 'Frequency',
     marker: { color: COLORS.primary, opacity: 0.8 },
-    ...(({ nbinsx: 20 } as any)),
-    hovertemplate: '%{x:.0f} days: %{y} items<extra></extra>',
-  }]
+    nbinsx: 20,
+    hovertemplate: '%{x:.1f} days: %{y} items<extra></extra>',
+  } as any]
 
   const shapes: any[] = []
   const annotations: any[] = []
@@ -41,7 +41,13 @@ export default function TimeHistogram({ data, field, p50, p85, p95 }: Props) {
     <ChartErrorBoundary chartName="TimeHistogram">
       <Plot
         data={traces}
-        layout={{ ...darkLayout, shapes, annotations, bargap: 0.05 } as any}
+        layout={{
+          ...darkLayout,
+          shapes,
+          annotations,
+          bargap: 0.05,
+          xaxis: { type: 'linear', title: 'Days' },
+        } as any}
         config={plotConfig}
         style={{ width: '100%', height: '190px' }}
         useResizeHandler
