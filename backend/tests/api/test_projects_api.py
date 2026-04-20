@@ -98,13 +98,6 @@ class TestProjectUpdate:
         assert r.status_code == 200
         assert r.json()["platform"] == "jira"
 
-    def test_update_sync_frequency(self, client):
-        create_resp = _create_project(client)
-        pid = create_resp.json()["id"]
-        r = client.put(f"/api/projects/{pid}", json={"sync_frequency": "manual"})
-        assert r.status_code == 200
-        assert r.json()["sync_frequency"] == "manual"
-
     def test_update_unknown_project_returns_404(self, client):
         r = client.put("/api/projects/999999", json={"name": "Ghost"})
         assert r.status_code == 404
@@ -113,12 +106,6 @@ class TestProjectUpdate:
         create_resp = _create_project(client)
         pid = create_resp.json()["id"]
         r = client.put(f"/api/projects/{pid}", json={"platform": "totally_fake"})
-        assert r.status_code == 422
-
-    def test_update_invalid_sync_frequency_returns_422(self, client):
-        create_resp = _create_project(client)
-        pid = create_resp.json()["id"]
-        r = client.put(f"/api/projects/{pid}", json={"sync_frequency": "every_second"})
         assert r.status_code == 422
 
     def test_update_workflow_steps_replaces_all(self, client):
@@ -193,16 +180,9 @@ class TestProjectCreateValidation:
         })
         assert r.status_code == 422
 
-    def test_create_invalid_sync_frequency_returns_422(self, client):
-        r = client.post("/api/projects", json={
-            "name": "Bad", "platform": "csv",
-            "config": {}, "sync_frequency": "every_minute",
-        })
-        assert r.status_code == 422
-
     def test_create_missing_name_returns_422(self, client):
         r = client.post("/api/projects", json={
-            "platform": "csv", "config": {}, "sync_frequency": "manual",
+            "platform": "csv", "config": {},
         })
         assert r.status_code == 422
 

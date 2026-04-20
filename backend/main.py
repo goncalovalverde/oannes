@@ -24,21 +24,11 @@ async def lifespan(app: FastAPI):
     from database import init_db
     init_db()
     logger.info("Database initialized")
-    try:
-        from scheduler import start_scheduler
-        start_scheduler()
-        logger.info("Scheduler started")
-    except Exception as e:
-        logger.warning("Scheduler failed to start: %s", e)
 
     yield
 
     # ── shutdown ─────────────────────────────────────────────────────────────
-    try:
-        from scheduler import stop_scheduler
-        stop_scheduler()
-    except Exception:
-        pass
+    pass
 
 
 app = FastAPI(title="Oannes", version="2.0.0", lifespan=lifespan)

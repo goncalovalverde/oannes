@@ -143,7 +143,6 @@ describe('ProjectWizard — Edit mode', () => {
     name: 'Existing Project',
     platform: 'jira' as const,
     config: { url: 'https://jira.test', email: 'dev@test.com', api_token: 'tok' },
-    sync_frequency: 'hourly' as const,
     last_synced_at: null,
     created_at: '2025-01-01T00:00:00',
     workflow_steps: [],

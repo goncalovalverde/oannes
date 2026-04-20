@@ -12,7 +12,6 @@ class Project(Base):
     name = Column(String, nullable=False)
     platform = Column(String, nullable=False)
     config = Column(EncryptedJSON)
-    sync_frequency = Column(String, default="hourly")
     last_synced_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_now)
     workflow_steps = relationship("WorkflowStep", back_populates="project", order_by="WorkflowStep.position", cascade="all, delete-orphan")

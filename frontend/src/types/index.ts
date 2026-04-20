@@ -12,7 +12,6 @@ export interface Project {
   name: string
   platform: 'jira' | 'trello' | 'azure_devops' | 'gitlab' | 'linear' | 'shortcut' | 'csv'
   config: Record<string, any>
-  sync_frequency: 'hourly' | 'manual'
   last_synced_at: string | null
   created_at: string
   workflow_steps: WorkflowStep[]
@@ -98,7 +97,6 @@ export interface ProjectInput {
   name: string
   platform: Project['platform']
   config: Record<string, any>
-  sync_frequency: 'hourly' | 'manual'
   workflow_steps: WorkflowStepInput[]
 }
 

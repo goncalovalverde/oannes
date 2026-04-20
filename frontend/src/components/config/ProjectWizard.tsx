@@ -73,7 +73,6 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
     }
     return baseConfig
   })
-  const [syncFreq, setSyncFreq] = useState(existing?.sync_frequency ?? 'hourly')
   const [boards, setBoards] = useState<Array<{ id: string; name: string }>>([])
   const [selectedBoard, setSelectedBoard] = useState(existing?.config?.project_key ?? '')
   const [statuses, setStatuses] = useState<string[]>([])
@@ -164,7 +163,6 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
       name,
       platform: platform as Project['platform'],
       config: { ...config, project_key: selectedBoard },
-      sync_frequency: syncFreq,
       workflow_steps: steps,
     }
 

@@ -12,7 +12,6 @@ _VALID_STAGES = Literal["queue", "start", "in_flight", "done"]
 _VALID_PLATFORMS = Literal[
     "jira", "trello", "azure_devops", "gitlab", "linear", "shortcut", "csv"
 ]
-_VALID_FREQUENCIES = Literal["hourly", "manual"]
 
 
 class WorkflowStepCreate(BaseModel):
@@ -34,14 +33,12 @@ class ProjectCreate(BaseModel):
     name: str
     platform: _VALID_PLATFORMS
     config: dict = {}
-    sync_frequency: _VALID_FREQUENCIES = "hourly"
     workflow_steps: List[WorkflowStepCreate] = []
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     platform: Optional[_VALID_PLATFORMS] = None
     config: Optional[dict] = None
-    sync_frequency: Optional[_VALID_FREQUENCIES] = None
     workflow_steps: Optional[List[WorkflowStepCreate]] = None
 
 class ProjectOut(BaseModel):
@@ -49,7 +46,6 @@ class ProjectOut(BaseModel):
     name: str
     platform: str
     config: dict
-    sync_frequency: str
     last_synced_at: Optional[datetime]
     created_at: datetime
     workflow_steps: List[WorkflowStepOut] = []
@@ -64,8 +60,7 @@ def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
     project = Project(
         name=data.name,
         platform=data.platform,
-        config=data.config,
-        sync_frequency=data.sync_frequency
+        config=data.config
     )
     db.add(project)
     db.flush()
@@ -94,8 +89,6 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
         project.platform = data.platform
     if data.config is not None:
         project.config = data.config
-    if data.sync_frequency is not None:
-        project.sync_frequency = data.sync_frequency
     if data.workflow_steps is not None:
         db.query(WorkflowStep).filter(WorkflowStep.project_id == project_id).delete()
         for step in data.workflow_steps:
