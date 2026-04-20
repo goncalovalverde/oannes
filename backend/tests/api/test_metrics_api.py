@@ -278,7 +278,7 @@ class TestCfd:
         pid = _create_project(client)
         r = client.get(f"/api/metrics/{pid}/cfd")
         assert r.status_code == 200
-        assert r.json() == {"data": [], "stages": []}
+        assert r.json() == {"data": []}
 
     def test_unknown_project_returns_404(self, client):
         assert client.get("/api/metrics/999/cfd").status_code == 404
@@ -289,31 +289,30 @@ class TestCfd:
         r = client.get(f"/api/metrics/{pid}/cfd")
         assert r.status_code == 200
         body = r.json()
-        assert isinstance(body["stages"], list)
-        assert len(body["stages"]) > 0
         assert isinstance(body["data"], list)
         assert len(body["data"]) > 0
 
-    def test_each_cfd_row_contains_date_and_stage_counts(self, client, db):
+    def test_each_cfd_row_contains_date_stage_and_count(self, client, db):
         pid = _create_project(client)
         _seed_items(db, pid, n=10)
         r = client.get(f"/api/metrics/{pid}/cfd")
         body = r.json()
-        stages = body["stages"]
         for row in body["data"]:
             assert "date" in row
-            for stage in stages:
-                assert stage in row
-                assert isinstance(row[stage], int)
-                assert row[stage] >= 0
+            assert "stage" in row
+            assert "count" in row
+            assert isinstance(row["count"], int)
+            assert row["count"] >= 0
 
-    def test_cfd_stage_counts_are_cumulative(self, client, db):
+    def test_cfd_done_stage_counts_are_cumulative(self, client, db):
         """For a done-only stage, count should only increase over time."""
         pid = _create_project(client)
         _seed_items(db, pid, n=10)
         r = client.get(f"/api/metrics/{pid}/cfd")
         body = r.json()
-        done_counts = [row.get("Done", 0) for row in body["data"]]
+        done_rows = [row for row in body["data"] if row["stage"] == "Done"]
+        done_rows.sort(key=lambda x: x["date"])
+        done_counts = [row["count"] for row in done_rows]
         assert done_counts == sorted(done_counts), "Done stage counts must be non-decreasing"
 
     def test_item_type_filter_reduces_counts(self, client, db):
@@ -322,9 +321,11 @@ class TestCfd:
         all_r  = client.get(f"/api/metrics/{pid}/cfd")
         story_r = client.get(f"/api/metrics/{pid}/cfd?item_type=Story")
         assert story_r.status_code == 200
-        # Filtered totals must be <= unfiltered for every row position
-        all_done  = sum(row.get("Done", 0) for row in all_r.json()["data"])
-        story_done = sum(row.get("Done", 0) for row in story_r.json()["data"])
+        # Filtered totals must be <= unfiltered for done stage
+        all_done_rows = [row for row in all_r.json()["data"] if row["stage"] == "Done"]
+        story_done_rows = [row for row in story_r.json()["data"] if row["stage"] == "Done"]
+        all_done  = sum(row["count"] for row in all_done_rows)
+        story_done = sum(row["count"] for row in story_done_rows)
         assert story_done <= all_done
 
 

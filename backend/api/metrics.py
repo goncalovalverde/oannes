@@ -306,22 +306,23 @@ def get_cfd(
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
 
     if df.empty or not steps:
-        return {"data": [], "stages": []}
+        return {"data": []}
 
     stage_names = [s.display_name for s in steps if s.display_name in df.columns]
     if not stage_names:
-        return {"data": [], "stages": []}
+        return {"data": []}
 
     steps_list = [{"display_name": s.display_name, "stage": s.stage, "position": s.position, "source_statuses": s.source_statuses or []} for s in steps]
     cfd_df = calc_cfd(df, steps_list)
+    
     result = []
     for idx, row in cfd_df.iterrows():
-        r = {"date": idx.strftime("%Y-%m-%d")}
+        date_str = idx.strftime("%Y-%m-%d")
         for stage in stage_names:
-            r[stage] = int(row.get(stage, 0))
-        result.append(r)
+            count = int(row.get(stage, 0))
+            result.append({"date": date_str, "stage": stage, "count": count})
 
-    return {"data": result, "stages": stage_names}
+    return {"data": result}
 
 @router.get("/{project_id}/aging-wip")
 def get_aging_wip(
