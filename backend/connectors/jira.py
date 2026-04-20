@@ -551,13 +551,26 @@ class JiraConnector(BaseConnector):
             }
 
             start_steps = [s for s in self.workflow_steps if s["stage"] == "start"]
+            in_flight_steps = [s for s in self.workflow_steps if s["stage"] == "in_flight"]
             done_steps = [s for s in self.workflow_steps if s["stage"] == "done"]
 
-            if start_steps and done_steps:
-                start_col = start_steps[0]["display_name"]
+            if done_steps:
                 done_col = done_steps[-1]["display_name"]
-                if timestamps.get(start_col) and timestamps.get(done_col):
-                    record["cycle_time_days"] = (timestamps[done_col] - timestamps[start_col]).days
+                done_ts = timestamps.get(done_col)
+                
+                # Cycle time: from start step, or first in_flight step, to done step
+                start_ts = None
+                if start_steps:
+                    start_col = start_steps[0]["display_name"]
+                    start_ts = timestamps.get(start_col)
+                
+                # Fallback to first in_flight step if start step not reached
+                if not start_ts and in_flight_steps:
+                    in_flight_col = in_flight_steps[0]["display_name"]
+                    start_ts = timestamps.get(in_flight_col)
+                
+                if start_ts and done_ts:
+                    record["cycle_time_days"] = (done_ts - start_ts).days
                 else:
                     record["cycle_time_days"] = None
 
