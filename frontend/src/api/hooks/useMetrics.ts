@@ -58,10 +58,10 @@ export function useWip(projectId: number | null, weeks: number) {
   })
 }
 
-export function useCfd(projectId: number | null) {
+export function useCfd(projectId: number | null, weeks: number = 12) {
   return useQuery<CfdPoint[]>({
-    queryKey: ['metrics', projectId, 'cfd'],
-    queryFn: () => client.get(`/metrics/${projectId}/cfd`).then(r => r.data.data),
+    queryKey: ['metrics', projectId, 'cfd', weeks],
+    queryFn: () => client.get(`/metrics/${projectId}/cfd`, { params: { weeks } }).then(r => r.data.data),
     enabled: projectId != null,
   })
 }

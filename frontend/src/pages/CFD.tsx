@@ -5,8 +5,8 @@ import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
 import EmptyState from '../components/ui/EmptyState'
 
 export default function CFD() {
-  const { activeProjectId } = useFilterStore()
-  const { data = [], isLoading } = useCfd(activeProjectId)
+  const { activeProjectId, weeks } = useFilterStore()
+  const { data = [], isLoading } = useCfd(activeProjectId, weeks)
 
   if (!activeProjectId) return <EmptyState icon="∿" title="No project selected" description="Select a project from the sidebar." />
 
@@ -15,7 +15,13 @@ export default function CFD() {
       <div className="bg-surface border border-border rounded-xl p-5">
         <div className="text-sm font-bold mb-1">Cumulative Flow Diagram</div>
         <div className="text-xs text-muted mb-4">Items accumulated in each stage over time — bands widening indicate bottlenecks</div>
-        {isLoading ? <ChartSkeleton /> : <CFDChart data={data} />}
+        {isLoading ? (
+          <ChartSkeleton />
+        ) : data && data.length > 0 ? (
+          <CFDChart data={data} />
+        ) : (
+          <div className="h-48 flex items-center justify-center text-muted text-sm">No data available</div>
+        )}
       </div>
 
       <div className="px-4 py-3 bg-surface2 border border-border rounded-xl text-sm text-muted2">
