@@ -121,14 +121,26 @@ class JiraConnector(BaseConnector):
             logger.debug(f"[Jira Client] Initializing with auth_type: {auth_type}")
             
             if auth_type == "personal_access_token":
-                # For PAT, we can't use the jira library's basic_auth
-                # Just create a dummy JIRA client; we'll use requests for actual calls
-                # The jira library still expects some form of auth for initialization
-                logger.debug(f"[Jira Client] Creating JIRA client for PAT (will use requests directly)")
+                # For PAT, create JIRA client without auth, then set Bearer token in session
+                logger.debug(f"[Jira Client] Creating JIRA client for PAT with Bearer token")
+                
+                # Create JIRA client without auth validation
                 self._jira = JIRA(
                     server=self.config["url"],
-                    options={"agile_rest_path": "agile"}
+                    options={"agile_rest_path": "agile"},
+                    validate=False,  # Don't validate server on init
+                    get_server_info=False  # Don't fetch server info on init
                 )
+                
+                # Set Bearer token in the session
+                pat = self.config.get("personal_access_token", "")
+                if hasattr(self._jira, '_session'):
+                    self._jira._session.headers.update({
+                        'Authorization': f'Bearer {pat}'
+                    })
+                    logger.debug("[Jira Client] Set Bearer token in session headers")
+                else:
+                    logger.warning("[Jira Client] Could not find _session attribute")
             else:
                 # API token auth
                 email = self.config.get("email", "")
@@ -136,7 +148,9 @@ class JiraConnector(BaseConnector):
                 logger.debug(f"[Jira Client] Creating JIRA client with API token (email: {email}, token length: {len(token)})")
                 self._jira = JIRA(
                     server=self.config["url"],
-                    basic_auth=(email, token)
+                    basic_auth=(email, token),
+                    validate=False,  # Skip server validation
+                    get_server_info=False  # Don't fetch server info on init
                 )
         return self._jira
 
@@ -145,6 +159,9 @@ class JiraConnector(BaseConnector):
 
         Jira Cloud removed /rest/api/2/search (CHANGE-2046).
         The jira library still uses v2; we call v3 ourselves.
+        
+        Uses the jira client's ResilientSession to get automatic retry logic
+        for rate limiting (429) and other transient errors.
         """
         url = f"{self.config['url'].rstrip('/')}/rest/api/3/search/jql"
         params = {
@@ -155,35 +172,16 @@ class JiraConnector(BaseConnector):
             "fields": "*all",
         }
         
-        # Prepare auth based on auth type
-        headers = {}
-        auth = None
-        
-        auth_type = self.config.get("auth_type", "api_token")
         logger.debug(f"[Jira Search] URL: {url}")
-        logger.debug(f"[Jira Search] Auth type: {auth_type}")
         
-        if auth_type == "personal_access_token":
-            # PAT uses Bearer token
-            pat = self.config.get("personal_access_token", "")
-            logger.debug(f"[Jira Search] Using Bearer token (length: {len(pat)})")
-            headers = {"Authorization": f"Bearer {pat}"}
-        else:
-            # API token uses basic auth
-            email = self.config.get("email", "")
-            logger.debug(f"[Jira Search] Using basic auth with email: {email}")
-            auth = (email, self.config.get("api_token", ""))
+        # Get the jira client (has ResilientSession with automatic retry logic)
+        jira = self._get_client()
         
         logger.debug(f"[Jira Search] Making request to {url}...")
         try:
-            resp = requests.get(
-                url,
-                params=params,
-                auth=auth,
-                headers=headers if headers else None,
-                timeout=30,
-                allow_redirects=True,
-            )
+            # Use jira._session (ResilientSession) for automatic retry logic
+            # Note: ResilientSession handles timeout internally, don't override it
+            resp = jira._session.get(url, params=params)
             logger.debug(f"[Jira Search] Response status: {resp.status_code}")
             resp.raise_for_status()
             data = resp.json()
@@ -204,15 +202,15 @@ class JiraConnector(BaseConnector):
             auth_type = self.config.get("auth_type", "api_token")
             
             if auth_type == "personal_access_token":
-                # For PAT, try Bearer token with allow_redirects
+                # For PAT, use Bearer token with jira client's ResilientSession for rate limit retry
                 logger.debug("[Jira Test] Using PAT token with Bearer authorization")
-                url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
-                pat = self.config.get('personal_access_token', '')
                 
-                # Try Bearer token - allow redirects
-                headers = {"Authorization": f"Bearer {pat}"}
-                logger.debug("[Jira Test] Sending request with Bearer token (allowing redirects)")
-                resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+                jira = self._get_client()
+                
+                # Test myself endpoint
+                url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
+                logger.debug("[Jira Test] Sending request with Bearer token using ResilientSession")
+                resp = jira._session.get(url)
                 logger.debug(f"[Jira Test] Response status: {resp.status_code}")
                 logger.debug(f"[Jira Test] Response headers: {dict(resp.headers)}")
                 
@@ -225,7 +223,7 @@ class JiraConnector(BaseConnector):
                 
                 # Now fetch projects with same auth method
                 url = f"{self.config['url'].rstrip('/')}/rest/api/3/projects"
-                resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+                resp = jira._session.get(url)
                 resp.raise_for_status()
                 data = resp.json()
                 projects = data.get('values', [])

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useCreateProject, useUpdateProject, useTestConnection, useDiscoverStatuses } from '../../api/hooks/useProjects'
 import type { Project, ProjectInput } from '../../types'
 import AlertBanner from '../ui/AlertBanner'
@@ -14,10 +14,10 @@ const PLATFORMS = [
   { id: 'csv',         label: 'CSV / Excel',   icon: '📄', desc: 'Import from file' },
 ]
 
-const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string; help?: string; optional?: boolean; conditional?: (config: Record<string, string>) => boolean }>> = {
+const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string; help?: string; optional?: boolean; default?: string; conditional?: (config: Record<string, string>) => boolean }>> = {
   jira: [
     { key: 'url',       label: 'Jira URL',    placeholder: 'https://yourcompany.atlassian.net' },
-    { key: 'auth_type', label: 'Authentication Type', type: 'select', optional: false, help: 'Choose based on your Jira instance configuration' },
+    { key: 'auth_type', label: 'Authentication Type', type: 'select', optional: false, default: 'api_token', help: 'Choose based on your Jira instance configuration' },
     { key: 'email',     label: 'Email',       type: 'email', placeholder: 'you@company.com', conditional: (cfg) => cfg.auth_type === 'api_token' },
     { key: 'api_token', label: 'API Token',   type: 'password', help: 'Create at: id.atlassian.com/manage-profile/security/api-tokens', conditional: (cfg) => cfg.auth_type === 'api_token' },
     { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', help: 'Create at: your Jira instance → Profile → Personal Access Tokens', conditional: (cfg) => cfg.auth_type === 'personal_access_token' },
@@ -59,7 +59,14 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [step, setStep] = useState(existing ? 2 : 1)
   const [platform, setPlatform] = useState(existing?.platform ?? '')
   const [name, setName] = useState(existing?.name ?? '')
-  const [config, setConfig] = useState<Record<string, string>>(existing?.config ?? {})
+  const [config, setConfig] = useState<Record<string, string>>(() => {
+    const baseConfig = existing?.config ?? {}
+    // Set default auth_type for Jira if not already set
+    if (!existing && !baseConfig.auth_type) {
+      return { ...baseConfig, auth_type: 'api_token' }
+    }
+    return baseConfig
+  })
   const [syncFreq, setSyncFreq] = useState(existing?.sync_frequency ?? 'hourly')
   const [boards, setBoards] = useState<Array<{ id: string; name: string }>>([])
   const [selectedBoard, setSelectedBoard] = useState(existing?.config?.project_key ?? '')
@@ -68,6 +75,41 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
     Object.fromEntries(existing?.workflow_steps?.map(s => s.source_statuses.map(ss => [ss, s.stage])).flat() ?? [])
   )
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+
+  // Set default auth_type for Jira when platform is selected
+  useEffect(() => {
+    if (platform === 'jira' && !config.auth_type) {
+      setConfig(c => ({ ...c, auth_type: 'api_token' }))
+    }
+  }, [platform])
+
+  // Validate required fields
+  const getValidationErrors = (): string[] => {
+    const errors: string[] = []
+    
+    // Project name is always required
+    if (!name.trim()) {
+      errors.push('Project name is required')
+    }
+
+    const fields = PLATFORM_FIELDS[platform] ?? []
+    for (const field of fields) {
+      if (field.optional) continue
+      
+      // Check if field should be shown (respects conditional rendering)
+      const shouldShow = !field.conditional || field.conditional(config)
+      if (!shouldShow) continue
+
+      // Check if field is filled
+      const value = config[field.key]?.trim()
+      if (!value) {
+        errors.push(`${field.label} is required`)
+      }
+    }
+
+    return errors
+  }
 
   const { mutate: testConn, isPending: isTesting } = useTestConnection()
   const { mutate: discoverStatuses } = useDiscoverStatuses()
@@ -75,6 +117,12 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const { mutate: updateProject, isPending: isUpdating } = useUpdateProject()
 
   const handleTest = () => {
+    const errors = getValidationErrors()
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      return
+    }
+    setValidationErrors([])
     testConn({ platform, config }, {
       onSuccess: (res) => {
         setTestResult({ success: res.success, message: res.message })
@@ -194,7 +242,7 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
                     </label>
                     {field.type === 'select' ? (
                       <select
-                        value={config[field.key] ?? ''}
+                        value={config[field.key] ?? field.default ?? ''}
                         onChange={e => setConfig(c => ({ ...c, [field.key]: e.target.value }))}
                         className="w-full bg-surface2 border border-border text-text text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-primary"
                       >
@@ -215,6 +263,16 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
                   </div>
                 )
               })}
+
+              {validationErrors.length > 0 && (
+                <AlertBanner type="error">
+                  <div className="space-y-1">
+                    {validationErrors.map((err, i) => (
+                      <div key={i}>⚠️ {err}</div>
+                    ))}
+                  </div>
+                </AlertBanner>
+              )}
 
               <button
                 onClick={handleTest}

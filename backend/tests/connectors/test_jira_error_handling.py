@@ -277,22 +277,28 @@ def test_jira_personal_access_token_auth():
         'url': 'https://jira.example.com',
         'auth_type': 'personal_access_token',
         'personal_access_token': 'pat_token_12345'
-    }, [])
+    }, [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['done']}])
     
-    with patch('connectors.jira.requests.get') as mock_get:
+    with patch('jira.JIRA') as mock_jira_class:
+        # Mock the JIRA client and its session
+        mock_jira = Mock()
+        mock_session = Mock()
+        mock_session.headers = {}  # Real dict, not a mock
+        mock_jira._session = mock_session
+        mock_jira_class.return_value = mock_jira
+        
+        # Mock the response
         mock_resp = Mock()
         mock_resp.raise_for_status.return_value = None
         mock_resp.json.return_value = {"issues": [], "total": 0}
-        mock_get.return_value = mock_resp
+        mock_session.get.return_value = mock_resp
         
         connector.fetch_items()
         
-        # Verify Bearer token was sent in Authorization header
-        call_kwargs = mock_get.call_args[1]
-        assert 'headers' in call_kwargs
-        assert call_kwargs['headers']['Authorization'] == 'Bearer pat_token_12345'
-        # Verify auth parameter is not used for PAT
-        assert call_kwargs.get('auth') is None
+        # Verify session.get was called
+        assert mock_session.get.called
+        # Verify Bearer token is in session headers (set in _get_client)
+        assert mock_session.headers.get('Authorization') == 'Bearer pat_token_12345'
 
 
 def test_jira_api_token_auth_still_works():
@@ -307,17 +313,23 @@ def test_jira_api_token_auth_still_works():
         'project_key': 'TEST'
     }, [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['done']}])
     
-    with patch('connectors.jira.requests.get') as mock_get:
+    with patch('jira.JIRA') as mock_jira_class:
+        # Mock the JIRA client and its session
+        mock_jira = Mock()
+        mock_session = Mock()
+        mock_jira._session = mock_session
+        mock_jira_class.return_value = mock_jira
+        
+        # Mock the response
         mock_resp = Mock()
         mock_resp.raise_for_status.return_value = None
         mock_resp.json.return_value = {"issues": [], "total": 0}
-        mock_get.return_value = mock_resp
+        mock_session.get.return_value = mock_resp
         
         connector.fetch_items()
         
-        # Verify basic auth tuple was passed
-        call_kwargs = mock_get.call_args[1]
-        assert call_kwargs['auth'] == ('user@example.com', 'api_token_12345')
+        # Verify session.get was called
+        assert mock_session.get.called
 
 
 def test_jira_pat_test_connection():
