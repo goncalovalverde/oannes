@@ -19,7 +19,7 @@ export default function ThroughputChart({ data, weeks }: Props) {
     marker: { color: TYPE_COLORS[i % TYPE_COLORS.length] },
   }))
 
-  // Trendline on Total
+  // Trendline on Total (extends beyond data range for proper zoom behavior)
   const totals = data.map(d => d.Total ?? 0)
   const n = totals.length
   if (n > 1) {
@@ -30,10 +30,18 @@ export default function ThroughputChart({ data, weeks }: Props) {
     const sumX2 = xIdx.reduce((a, i) => a + i * i, 0)
     const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)
     const intercept = (sumY - slope * sumX) / n
+    
+    // Extend trendline slightly beyond data range for better zoom behavior
+    const extendFactor = 0.05
+    const minX = -extendFactor * (n - 1)
+    const maxX = (n - 1) * (1 + extendFactor)
+    const trendlineX = [minX, maxX]
+    const trendlineY = trendlineX.map(i => slope * i + intercept)
+    
     traces.push({
       type: 'scatter', mode: 'lines', name: 'Trend',
-      x: weeks_x,
-      y: xIdx.map(i => slope * i + intercept),
+      x: trendlineX.map(i => weeks_x[Math.round(i)] || (i < 0 ? weeks_x[0] : weeks_x[weeks_x.length - 1])),
+      y: trendlineY,
       line: { color: COLORS.purple, dash: 'dash', width: 2 },
       opacity: 0.7,
     })
