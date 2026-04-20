@@ -31,6 +31,7 @@ export interface SyncJob {
 export interface MetricsSummary {
   throughput_avg: number
   throughput_trend_pct: number
+  cycle_time_avg: number | null
   cycle_time_50th: number | null
   cycle_time_85th: number | null
   cycle_time_95th: number | null

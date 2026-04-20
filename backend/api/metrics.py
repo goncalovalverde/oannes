@@ -85,6 +85,7 @@ class MonteCarloRequest(BaseModel):
 class MetricsSummary(BaseModel):
     throughput_avg: float
     throughput_trend_pct: float
+    cycle_time_avg: Optional[float]
     cycle_time_50th: Optional[float]
     cycle_time_85th: Optional[float]
     cycle_time_95th: Optional[float]
@@ -517,6 +518,7 @@ def get_summary(
     return MetricsSummary(
         throughput_avg=round(throughput_avg, 1),
         throughput_trend_pct=round(throughput_trend_pct, 1),
+        cycle_time_avg=ct_stats.get("mean"),
         cycle_time_50th=ct_stats.get("p50"),
         cycle_time_85th=ct_stats.get("p85"),
         cycle_time_95th=ct_stats.get("p95"),
