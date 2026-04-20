@@ -294,6 +294,19 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
                 {isTesting ? 'Testing connection…' : '🔌 Test Connection'}
               </button>
 
+              {isTesting && (
+                <AlertBanner type="info">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span>Checking connection status…</span>
+                  </div>
+                </AlertBanner>
+              )}
+
               {testResult && (
                 <AlertBanner type={testResult.success ? 'info' : 'error'}>
                   <div>
