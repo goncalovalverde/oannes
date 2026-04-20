@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useProjects, useDeleteProject } from '../api/hooks/useProjects'
-import { useTriggerSync } from '../api/hooks/useSync'
+import { useTriggerSync, useSyncStatus } from '../api/hooks/useSync'
 import { useFilterStore } from '../store/filterStore'
 import ProjectWizard from '../components/config/ProjectWizard'
 import type { Project } from '../types'
@@ -60,7 +60,22 @@ export default function Projects() {
         </div>
       )}
 
-      {projects.map(project => (
+      {projects.map(project => {
+        // eslint-disable-next-line react-hooks/rules-of-hooks
+        const { data: syncJob } = useSyncStatus(project.id)
+        const isSyncActive = syncJob?.status === 'running' || syncJob?.status === 'pending'
+
+        const handleSyncClick = () => {
+          if (isSyncActive) {
+            const progress = syncJob?.items_fetched ? ` (${syncJob.items_fetched} items)` : ''
+            const status = syncJob?.status || 'syncing'
+            alert(`Project is currently ${status}${progress}. Please wait until the sync completes.`)
+            return
+          }
+          triggerSync(project.id)
+        }
+
+        return (
         <div key={project.id} className="bg-surface border border-border rounded-xl p-5">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
@@ -75,18 +90,20 @@ export default function Projects() {
             <div className="flex items-center gap-2">
               <span className={clsx(
                 'text-[10px] font-semibold px-2 py-0.5 rounded-full',
-                project.last_synced_at ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'
+                isSyncActive ? 'bg-warning/15 text-warning animate-pulse' : (project.last_synced_at ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning')
               )}>
-                {project.last_synced_at
+                {isSyncActive
+                  ? `Syncing${syncJob?.items_fetched ? ` (${syncJob.items_fetched} items)` : '…'}`
+                  : (project.last_synced_at
                   ? `Synced ${formatDistanceToNow(new Date(project.last_synced_at), { addSuffix: true })}`
-                  : 'Never synced'}
+                  : 'Never synced')}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
             <button
-              onClick={() => triggerSync(project.id)}
+              onClick={handleSyncClick}
               className="text-xs text-muted2 border border-border rounded-md px-3 py-1.5 hover:border-primary hover:text-primary transition-colors"
             >
               ↻ Sync Now
@@ -109,7 +126,8 @@ export default function Projects() {
             </button>
           </div>
         </div>
-      ))}
+        )
+      })}
 
       {(showWizard || editProject) && (
         <ProjectWizard

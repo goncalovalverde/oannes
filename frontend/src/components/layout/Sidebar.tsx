@@ -37,6 +37,19 @@ export default function Sidebar() {
 
   const isSyncActive = syncJob?.status === 'running' || syncJob?.status === 'pending' || isSyncing
 
+  const handleSyncClick = () => {
+    if (!activeProject) return
+
+    if (isSyncActive) {
+      const progress = syncJob?.items_fetched ? ` (${syncJob.items_fetched} items)` : ''
+      const status = syncJob?.status || 'syncing'
+      alert(`Project is currently ${status}${progress}. Please wait until the sync completes.`)
+      return
+    }
+
+    triggerSync(activeProject.id)
+  }
+
   return (
     <aside className="w-[220px] min-w-[220px] bg-surface border-r border-border flex flex-col h-full">
       {/* Logo */}
@@ -105,8 +118,7 @@ export default function Sidebar() {
           <span>{isSyncActive ? 'Syncing…' : `Synced ${lastSynced}`}</span>
         </div>
         <button
-          onClick={() => activeProject && triggerSync(activeProject.id)}
-          disabled={!activeProject || isSyncActive}
+          onClick={handleSyncClick}
           className="w-full text-xs font-medium text-muted2 border border-border rounded-md py-1.5 hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           ↻ Sync Now
