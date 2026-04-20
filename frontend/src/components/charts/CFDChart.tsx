@@ -17,6 +17,7 @@ export default function CFDChart({ data }: Props) {
       type: 'scatter', mode: 'lines', name: stage, stackgroup: 'one',
       x: dates, y: dates.map(d => byDate[d] ?? 0),
       line: { color: TYPE_COLORS[i % TYPE_COLORS.length] },
+      fill: 'tonexty',
       fillcolor: TYPE_COLORS[i % TYPE_COLORS.length] + '40',
     }
   })
