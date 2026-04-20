@@ -14,13 +14,14 @@ const PLATFORMS = [
   { id: 'csv',         label: 'CSV / Excel',   icon: '📄', desc: 'Import from file' },
 ]
 
-const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string; help?: string; optional?: boolean; default?: string; conditional?: (config: Record<string, string>) => boolean }>> = {
+const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string; help?: string; optional?: boolean; default?: string; options?: Array<{value: string; label: string}>; conditional?: (config: Record<string, string>) => boolean }>> = {
   jira: [
     { key: 'url',       label: 'Jira URL',    placeholder: 'https://yourcompany.atlassian.net' },
-    { key: 'auth_type', label: 'Authentication Type', type: 'select', optional: false, default: 'api_token', help: 'Choose based on your Jira instance configuration' },
+    { key: 'auth_type', label: 'Authentication Type', type: 'select', optional: false, default: 'api_token', options: [{ value: 'api_token', label: 'API Token (Email + Token)' }, { value: 'personal_access_token', label: 'Personal Access Token' }], help: 'Choose based on your Jira instance configuration' },
     { key: 'email',     label: 'Email',       type: 'email', placeholder: 'you@company.com', conditional: (cfg) => cfg.auth_type === 'api_token' },
     { key: 'api_token', label: 'API Token',   type: 'password', help: 'Create at: id.atlassian.com/manage-profile/security/api-tokens', conditional: (cfg) => cfg.auth_type === 'api_token' },
     { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', help: 'Create at: your Jira instance → Profile → Personal Access Tokens', conditional: (cfg) => cfg.auth_type === 'personal_access_token' },
+    { key: 'jira_api_version', label: 'Jira API Version', type: 'select', optional: false, default: 'auto', options: [{ value: 'auto', label: 'Auto-detect (recommended)' }, { value: 'v3', label: 'Force v3 (Cloud)' }, { value: 'v2', label: 'Force v2 (Server/Data Center)' }], help: '⚠️ Most users should use "Auto-detect". Only change if you know your Jira version.' },
     { key: 'jql',       label: 'JQL Filter',  placeholder: 'project = MYPROJ', optional: true },
   ],
   trello: [
@@ -61,9 +62,14 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [name, setName] = useState(existing?.name ?? '')
   const [config, setConfig] = useState<Record<string, string>>(() => {
     const baseConfig = existing?.config ?? {}
-    // Set default auth_type for Jira if not already set
-    if (!existing && !baseConfig.auth_type) {
-      return { ...baseConfig, auth_type: 'api_token' }
+    // Set defaults for Jira if creating new project
+    if (!existing) {
+      if (!baseConfig.auth_type) {
+        baseConfig.auth_type = 'api_token'
+      }
+      if (!baseConfig.jira_api_version) {
+        baseConfig.jira_api_version = 'auto'
+      }
     }
     return baseConfig
   })
@@ -74,13 +80,20 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [workflowMap, setWorkflowMap] = useState<Record<string, string>>(
     Object.fromEntries(existing?.workflow_steps?.map(s => s.source_statuses.map(ss => [ss, s.stage])).flat() ?? [])
   )
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; api_version_detected?: string | null } | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [draggedStatus, setDraggedStatus] = useState<string | null>(null)
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null)
 
-  // Set default auth_type for Jira when platform is selected
+  // Set default auth_type and api_version for Jira when platform is selected
   useEffect(() => {
-    if (platform === 'jira' && !config.auth_type) {
-      setConfig(c => ({ ...c, auth_type: 'api_token' }))
+    if (platform === 'jira') {
+      if (!config.auth_type) {
+        setConfig(c => ({ ...c, auth_type: 'api_token' }))
+      }
+      if (!config.jira_api_version) {
+        setConfig(c => ({ ...c, jira_api_version: 'auto' }))
+      }
     }
   }, [platform])
 
@@ -247,8 +260,9 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
                         className="w-full bg-surface2 border border-border text-text text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-primary"
                       >
                         <option value="">-- Select --</option>
-                        <option value="api_token">API Token (Email + Token)</option>
-                        <option value="personal_access_token">Personal Access Token</option>
+                        {field.options?.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
                       </select>
                     ) : (
                       <input
@@ -284,7 +298,14 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
 
               {testResult && (
                 <AlertBanner type={testResult.success ? 'info' : 'error'}>
-                  {testResult.message}
+                  <div>
+                    <div>{testResult.message}</div>
+                    {testResult.api_version_detected && (
+                      <div className="text-[10px] mt-1 opacity-75">
+                        API Version: {testResult.api_version_detected.toUpperCase()}
+                      </div>
+                    )}
+                  </div>
                 </AlertBanner>
               )}
 
@@ -327,14 +348,56 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
 
               <div className="grid grid-cols-2 gap-3">
                 {STAGES.map(stage => (
-                  <div key={stage} className="bg-surface2 border border-border rounded-xl p-3">
+                  <div
+                    key={stage}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.currentTarget.classList.add('ring-2', 'ring-primary/50')
+                      setDragOverStage(stage)
+                    }}
+                    onDragLeave={(e) => {
+                      e.currentTarget.classList.remove('ring-2', 'ring-primary/50')
+                      setDragOverStage(null)
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.currentTarget.classList.remove('ring-2', 'ring-primary/50')
+                      const status = e.dataTransfer?.getData('text/plain')
+                      if (status) {
+                        setWorkflowMap(m => ({ ...m, [status]: stage }))
+                      }
+                      setDragOverStage(null)
+                    }}
+                    className={clsx(
+                      'bg-surface2 border border-border rounded-xl p-3 transition-all duration-150',
+                      dragOverStage === stage && 'ring-2 ring-primary/50 bg-primary/5'
+                    )}
+                  >
                     <div className="text-xs font-semibold text-muted uppercase tracking-widest mb-0.5">{STAGE_LABELS[stage]}</div>
                     <div className="text-[10px] text-muted mb-2">{STAGE_DESCS[stage]}</div>
-                    <div className="flex flex-wrap gap-1 min-h-[28px]">
+                    <div className="flex flex-wrap gap-1 min-h-[40px]">
                       {statuses.filter(s => workflowMap[s] === stage).map(s => (
-                        <span key={s} onClick={() => setWorkflowMap(m => { const n = { ...m }; delete n[s]; return n })}
-                          className="bg-primary/20 text-primary text-[10px] font-medium px-2 py-0.5 rounded cursor-pointer hover:bg-danger/20 hover:text-danger transition-colors">
-                          {s} ×
+                        <span
+                          key={s}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer?.setData('text/plain', s)
+                            setDraggedStatus(s)
+                          }}
+                          onDragEnd={() => setDraggedStatus(null)}
+                          className={clsx(
+                            'bg-primary/20 text-primary text-[10px] font-medium px-2 py-0.5 rounded cursor-grab active:cursor-grabbing hover:bg-danger/20 hover:text-danger transition-all duration-150 flex items-center gap-1 select-none',
+                            draggedStatus === s && 'opacity-50'
+                          )}
+                        >
+                          {s}
+                          <button
+                            onClick={() => setWorkflowMap(m => { const n = { ...m }; delete n[s]; return n })}
+                            className="ml-0.5 hover:opacity-70"
+                            title="Remove assignment"
+                          >
+                            ×
+                          </button>
                         </span>
                       ))}
                     </div>
@@ -344,20 +407,44 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
 
               {/* Unassigned statuses */}
               <div>
-                <div className="text-[11px] font-semibold text-muted uppercase tracking-widest mb-2">Unassigned statuses — click to assign</div>
-                <div className="flex flex-wrap gap-2">
+                <div className="text-[11px] font-semibold text-muted uppercase tracking-widest mb-2">Unassigned statuses — drag to assign</div>
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.currentTarget.classList.add('ring-1', 'ring-muted/30')
+                  }}
+                  onDragLeave={(e) => {
+                    e.currentTarget.classList.remove('ring-1', 'ring-muted/30')
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.currentTarget.classList.remove('ring-1', 'ring-muted/30')
+                    const status = e.dataTransfer?.getData('text/plain')
+                    if (status && workflowMap[status]) {
+                      setWorkflowMap(m => { const n = { ...m }; delete n[status]; return n })
+                    }
+                  }}
+                  className={clsx(
+                    'flex flex-wrap gap-2 p-3 bg-surface border border-border rounded-lg transition-all duration-150 min-h-[50px]',
+                    dragOverStage === null && draggedStatus && 'ring-1 ring-muted/30'
+                  )}
+                >
                   {statuses.filter(s => !workflowMap[s]).map(s => (
-                    <div key={s} className="relative group">
-                      <span className="bg-surface2 border border-border text-muted2 text-xs px-2 py-1 rounded cursor-pointer">{s}</span>
-                      <div className="absolute top-full left-0 mt-1 bg-surface border border-border rounded-lg shadow-xl z-10 hidden group-hover:flex flex-col text-xs min-w-[100px]">
-                        {STAGES.map(stage => (
-                          <button key={stage} onClick={() => setWorkflowMap(m => ({ ...m, [s]: stage }))}
-                            className="px-3 py-1.5 text-left hover:bg-surface2 hover:text-text text-muted2 first:rounded-t-lg last:rounded-b-lg">
-                            {STAGE_LABELS[stage]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    <span
+                      key={s}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer?.setData('text/plain', s)
+                        setDraggedStatus(s)
+                      }}
+                      onDragEnd={() => setDraggedStatus(null)}
+                      className={clsx(
+                        'bg-surface2 border border-border text-muted2 text-xs px-2 py-1 rounded cursor-grab active:cursor-grabbing hover:bg-primary/10 hover:text-text transition-all duration-150 select-none',
+                        draggedStatus === s && 'opacity-50'
+                      )}
+                    >
+                      {s}
+                    </span>
                   ))}
                 </div>
               </div>

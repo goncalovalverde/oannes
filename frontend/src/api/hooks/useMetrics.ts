@@ -71,10 +71,10 @@ export function useItemTypes(projectId: number | null) {
   })
 }
 
-export function useRawData(projectId: number | null) {
+export function useRawData(projectId: number | null, weeks: number = 52, itemType: string = 'all') {
   return useQuery({
-    queryKey: ['metrics', projectId, 'raw'],
-    queryFn: () => client.get(`/metrics/${projectId}/raw-data`).then(r => r.data.data),
+    queryKey: ['metrics', projectId, 'raw', weeks, itemType],
+    queryFn: () => client.get(`/metrics/${projectId}/raw-data`, { params: { weeks, item_type: itemType } }).then(r => r.data.data),
     enabled: projectId != null,
   })
 }

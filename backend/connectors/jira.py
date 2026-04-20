@@ -4,8 +4,13 @@ import requests
 from datetime import datetime
 from connectors.base import BaseConnector
 from jira import JIRAError
+from requests.exceptions import HTTPError
 
 logger = logging.getLogger(__name__)
+
+class JiraV3NotSupportedError(Exception):
+    """Raised when v3 API is not available (on-premises with v2 only)."""
+    pass
 
 # Enable debug logging for requests library to see HTTP headers/responses
 logging.getLogger("urllib3").setLevel(logging.DEBUG)
@@ -41,6 +46,12 @@ def _format_jira_error(error: Exception, context: str = "") -> str:
                 "Ask your Jira administrator for access."
             )
         elif status == 404:
+            # Check if this is a v3-specific 404 on search endpoint
+            if 'search/jql' in context.lower():
+                return (
+                    "Jira API endpoint not found. Your Jira instance may not support the v3 API. "
+                    "Try selecting 'Force v2' in the project configuration if you're on an older Jira version."
+                )
             return (
                 f"Jira project or resource not found. {context} "
                 "Please check the project key and try again."
@@ -72,9 +83,9 @@ def _format_jira_error(error: Exception, context: str = "") -> str:
     # Handle Jira application-level error messages in 200 responses (e.g. deprecated APIs)
     if 'api has been removed' in error_str.lower() or 'migrate to' in error_str.lower():
         return (
-            "Jira rejected the request: the API endpoint used by Oannes has been removed. "
-            "This is a known Jira Cloud change (CHANGE-2046). Please ensure you are running "
-            "the latest version of Oannes."
+            "Jira rejected the request: the API endpoint is not available. "
+            "This can happen if your Jira is still on an older API version. "
+            "Try selecting 'Force v2' in the project configuration, or ensure your Jira is up to date."
         )
     
     # Handle connection errors
@@ -154,6 +165,97 @@ class JiraConnector(BaseConnector):
                 )
         return self._jira
 
+    def _resolve_api_version(self) -> str:
+        """Resolve which Jira API version to use: v3, v2, or auto-detect.
+        
+        Returns:
+            'v3' or 'v2'
+        """
+        configured_version = self.config.get("jira_api_version", "auto")
+        logger.debug(f"[Jira API] Configured version: {configured_version}")
+        
+        # If explicitly set to v2 or v3, use that
+        if configured_version in ("v2", "v3"):
+            logger.info(f"[Jira API] Using explicitly configured version: {configured_version}")
+            return configured_version
+        
+        # Auto-detect: try v3 first
+        logger.debug("[Jira API] Auto-detecting: attempting v3 first")
+        try:
+            # Test v3 with a simple endpoint that requires no project knowledge
+            url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
+            jira = self._get_client()
+            # Note: ResilientSession handles timeout internally, don't override it
+            resp = jira._session.get(url)
+            
+            logger.debug(f"[Jira API] v3 test returned status {resp.status_code}")
+            
+            if resp.status_code == 200:
+                logger.info("[Jira API] Auto-detected v3 API available")
+                return "v3"
+            elif resp.status_code == 302:
+                # 302 redirect to login page means auth failed or v3 not available
+                logger.warning(f"[Jira API] v3 endpoint returned 302 redirect, assuming v2-only instance")
+                raise JiraV3NotSupportedError("v3 API returned 302 redirect")
+            elif resp.status_code in (404, 410):
+                # 404/410 suggests v3 not available
+                logger.warning(f"[Jira API] v3 endpoint returned {resp.status_code}, assuming v2-only instance")
+                raise JiraV3NotSupportedError(f"v3 API returned {resp.status_code}")
+            else:
+                # Other 4xx/5xx status codes should be surfaced to user (auth/permission errors)
+                logger.warning(f"[Jira API] v3 endpoint returned {resp.status_code}, treating as error")
+                resp.raise_for_status()
+        except (JiraV3NotSupportedError, JIRAError) as e:
+            if isinstance(e, JiraV3NotSupportedError):
+                logger.info("[Jira API] v3 not supported, falling back to v2")
+                return "v2"
+            # For other JIRAErrors, re-raise (auth/permission issues, not version)
+            logger.debug(f"[Jira API] JIRAError during v3 test: {e}")
+            raise
+        except Exception as e:
+            # For non-version errors (network, SSL, timeout), don't assume v2
+            logger.debug(f"[Jira API] Non-version error during v3 test: {type(e).__name__}: {e}")
+            raise
+
+    def _search_issues_v2(self, jql: str, start: int, batch: int) -> dict:
+        """Call Jira Server/Data Center REST API v2 /search.
+        
+        Normalizes v2 response to match v3 structure (used by fetch_items).
+        """
+        url = f"{self.config['url'].rstrip('/')}/rest/api/2/search"
+        params = {
+            "jql": jql,
+            "startAt": start,
+            "maxResults": batch,
+            "expand": "changelog",
+            "fields": "*all",
+        }
+        
+        jira = self._get_client()
+        
+        logger.debug(f"[Jira Search v2] >>> REQUEST")
+        logger.debug(f"[Jira Search v2]     URL: {url}")
+        logger.debug(f"[Jira Search v2]     Params: startAt={start}, maxResults={batch}")
+        
+        try:
+            resp = jira._session.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            logger.debug(f"[Jira Search v2] <<< RESPONSE")
+            logger.debug(f"[Jira Search v2]     Status: {resp.status_code}")
+            logger.debug(f"[Jira Search v2]     Issues Count: {len(data.get('issues', []))}")
+            
+            # Surface any Jira application-level errors embedded in 200 response
+            if "errorMessages" in data and data["errorMessages"]:
+                logger.error(f"[Jira Search v2] Jira application error: {data['errorMessages']}")
+                raise JIRAError(status_code=400, text="; ".join(data["errorMessages"]))
+            
+            return data
+        except Exception as e:
+            logger.error(f"[Jira Search v2] Error: {type(e).__name__}: {str(e)}")
+            raise
+
     def _search_issues_v3(self, jql: str, start: int, batch: int) -> dict:
         """Call Jira Cloud REST API v3 /search/jql directly.
 
@@ -218,75 +320,57 @@ class JiraConnector(BaseConnector):
 
         return data
 
+    def _fetch_all_issues(self, search_method, jql: str) -> list:
+        """Helper to fetch all issues using the given search method.
+        
+        Args:
+            search_method: Either _search_issues_v3 or _search_issues_v2
+            jql: The JQL query string
+            
+        Returns:
+            List of all issues (paginated)
+        """
+        all_issues = []
+        start = 0
+        batch = 100
+
+        while True:
+            data = search_method(jql, start, batch)
+            issues = data.get("issues", [])
+            if not issues:
+                break
+            all_issues.extend(issues)
+            if len(issues) < batch:
+                break
+            start += batch
+        
+        return all_issues
+
     def test_connection(self) -> dict:
         logger.info(f"[Jira Test] Starting connection test with auth_type: {self.config.get('auth_type')}")
         logger.debug(f"[Jira Test] URL: {self.config.get('url')}")
         try:
-            auth_type = self.config.get("auth_type", "api_token")
+            # Resolve API version first
+            api_version = self._resolve_api_version()
+            configured_version = self.config.get("jira_api_version", "auto")
+            logger.info(f"[Jira Test] Using API v{api_version} (configured: {configured_version})")
             
-            if auth_type == "personal_access_token":
-                # For PAT, use Bearer token with jira client's ResilientSession for rate limit retry
-                logger.debug("[Jira Test] Using PAT token with Bearer authorization")
-                
-                jira = self._get_client()
-                
-                # Test myself endpoint
-                url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
-                logger.debug(f"[Jira Test] >>> REQUEST (myself endpoint)")
-                logger.debug(f"[Jira Test]     URL: {url}")
-                logger.debug(f"[Jira Test]     Headers: {dict(jira._session.headers)}")
-                
-                resp = jira._session.get(url)
-                
-                logger.debug(f"[Jira Test] <<< RESPONSE")
-                logger.debug(f"[Jira Test]     Status: {resp.status_code}")
-                logger.debug(f"[Jira Test]     Content-Type: {resp.headers.get('content-type', 'unknown')}")
-                
-                if resp.status_code not in [200, 401]:
-                    logger.debug(f"[Jira Test]     Response text (first 500 chars): {resp.text[:500]}")
-                
-                resp.raise_for_status()
-                user = resp.json()
-                logger.info(f"[Jira Test] ✅ Authenticated as: {user.get('displayName', 'Unknown')}")
-                
-                # Now fetch projects with same auth method
-                url = f"{self.config['url'].rstrip('/')}/rest/api/3/projects"
-                logger.debug(f"[Jira Test] >>> REQUEST (projects endpoint)")
-                logger.debug(f"[Jira Test]     URL: {url}")
-                
-                resp = jira._session.get(url)
-                
-                logger.debug(f"[Jira Test] <<< RESPONSE")
-                logger.debug(f"[Jira Test]     Status: {resp.status_code}")
-                logger.debug(f"[Jira Test]     Content-Length: {resp.headers.get('content-length', 'unknown')}")
-                
-                resp.raise_for_status()
-                data = resp.json()
-                projects = data.get('values', [])
-                logger.debug(f"[Jira Test]     Projects Count: {len(projects)}")
-                
-                return {
-                    "success": True,
-                    "message": f"Connected successfully. Found {len(projects)} projects.",
-                    "boards": [{"id": p.get("key"), "name": p.get("name")} for p in projects]
-                }
-            else:
-                # API token auth - use jira library
-                logger.debug("[Jira Test] Using JIRA library for API token")
-                logger.debug(f"[Jira Test] >>> REQUEST (projects via jira library)")
-                
-                jira = self._get_client()
-                projects = jira.projects()
-                
-                logger.debug(f"[Jira Test] <<< RESPONSE")
-                logger.debug(f"[Jira Test]     Projects Count: {len(projects)}")
-                logger.info(f"[Jira Test] ✅ Connected successfully. Found {len(projects)} projects")
-                
-                return {
-                    "success": True,
-                    "message": f"Connected successfully. Found {len(projects)} projects.",
-                    "boards": [{"id": p.key, "name": p.name} for p in projects]
-                }
+            # Use appropriate endpoints based on API version
+            try:
+                if api_version == "v3":
+                    return self._test_connection_v3()
+                else:  # v2
+                    return self._test_connection_v2()
+            except JiraV3NotSupportedError as e:
+                # If v3 test failed because v3 not supported, only fallback if auto-detect
+                # If user explicitly forced v3, re-raise the error
+                if configured_version == "auto":
+                    logger.warning(f"[Jira Test] v3 connection failed (auto-detected): {e}, falling back to v2")
+                    return self._test_connection_v2()
+                else:
+                    # User explicitly selected v3, don't fallback
+                    logger.error(f"[Jira Test] v3 connection failed (forced): {e}")
+                    raise
         except Exception as e:
             logger.error(f"[Jira Test] <<< ERROR")
             logger.error(f"[Jira Test]     Exception Type: {type(e).__name__}")
@@ -295,7 +379,114 @@ class JiraConnector(BaseConnector):
                 logger.error(f"[Jira Test]     Status Code: {e.status_code}")
             user_message = _format_jira_error(e, context="during connection test")
             logger.error(f"[Jira Test] ❌ Connection failed: {type(e).__name__}: {str(e)}", exc_info=True)
-            return {"success": False, "message": user_message, "boards": []}
+            return {"success": False, "message": user_message, "boards": [], "api_version_detected": None}
+
+    def _test_connection_v3(self) -> dict:
+        """Test connection using v3 API endpoints."""
+        logger.debug("[Jira Test v3] Testing v3 endpoints")
+        auth_type = self.config.get("auth_type", "api_token")
+        
+        if auth_type == "personal_access_token":
+            # For PAT, use Bearer token with jira client's ResilientSession
+            logger.debug("[Jira Test v3] Using PAT token with Bearer authorization")
+            
+            jira = self._get_client()
+            
+            try:
+                # Test myself endpoint
+                url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
+                logger.debug(f"[Jira Test v3] >>> REQUEST (myself endpoint)")
+                
+                resp = jira._session.get(url)
+                resp.raise_for_status()
+                user = resp.json()
+                logger.info(f"[Jira Test v3] ✅ Authenticated as: {user.get('displayName', 'Unknown')}")
+                
+                # Now fetch projects with same auth method
+                url = f"{self.config['url'].rstrip('/')}/rest/api/3/projects"
+                logger.debug(f"[Jira Test v3] >>> REQUEST (projects endpoint)")
+                
+                resp = jira._session.get(url)
+                resp.raise_for_status()
+                data = resp.json()
+                projects = data.get('values', [])
+                logger.debug(f"[Jira Test v3]     Projects Count: {len(projects)}")
+                
+                return {
+                    "success": True,
+                    "message": f"Connected successfully (API v3). Found {len(projects)} projects.",
+                    "boards": [{"id": p.get("key"), "name": p.get("name")} for p in projects],
+                    "api_version_detected": "v3"
+                }
+            except JIRAError as e:
+                # If projects endpoint returns 404, it might be v3-specific endpoint issue
+                if getattr(e, 'status_code', None) == 404 and '/projects' in str(e):
+                    logger.warning(f"[Jira Test v3] /rest/api/3/projects returned 404, might not be v3")
+                    raise JiraV3NotSupportedError("v3 projects endpoint returned 404")
+                # Other 404s (like /myself) indicate auth issues, re-raise
+                logger.debug(f"[Jira Test v3] JIRAError: {e}")
+                raise
+        else:
+            # API token auth - also use v3 endpoints directly
+            logger.debug("[Jira Test v3] Using API token auth (Basic Auth) with v3 endpoints")
+            jira = self._get_client()
+            
+            try:
+                # Test myself endpoint
+                url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
+                logger.debug(f"[Jira Test v3] >>> REQUEST (myself endpoint)")
+                
+                resp = jira._session.get(url)
+                resp.raise_for_status()
+                user = resp.json()
+                logger.info(f"[Jira Test v3] ✅ Authenticated as: {user.get('displayName', 'Unknown')}")
+                
+                # Now fetch projects with v3 API
+                url = f"{self.config['url'].rstrip('/')}/rest/api/3/projects"
+                logger.debug(f"[Jira Test v3] >>> REQUEST (projects endpoint)")
+                
+                resp = jira._session.get(url)
+                resp.raise_for_status()
+                data = resp.json()
+                projects = data.get('values', [])
+                logger.debug(f"[Jira Test v3]     Projects Count: {len(projects)}")
+                
+                return {
+                    "success": True,
+                    "message": f"Connected successfully (API v3). Found {len(projects)} projects.",
+                    "boards": [{"id": p.get("key"), "name": p.get("name")} for p in projects],
+                    "api_version_detected": "v3"
+                }
+            except JIRAError as e:
+                # If projects endpoint returns 404, it might be v3-specific endpoint issue
+                if getattr(e, 'status_code', None) == 404 and '/projects' in str(e):
+                    logger.warning(f"[Jira Test v3] /rest/api/3/projects returned 404, might not be v3")
+                    raise JiraV3NotSupportedError("v3 projects endpoint returned 404")
+                # Other 404s (like /myself) indicate auth issues, re-raise
+                logger.debug(f"[Jira Test v3] JIRAError: {e}")
+                raise
+
+    def _test_connection_v2(self) -> dict:
+        """Test connection using v2 API endpoints."""
+        logger.debug("[Jira Test v2] Testing v2 endpoints")
+        jira = self._get_client()
+        
+        # Use the jira library which supports v2
+        try:
+            projects = jira.projects()
+            logger.debug(f"[Jira Test v2]     Projects Count: {len(projects)}")
+            logger.info(f"[Jira Test v2] ✅ Connected successfully (API v2). Found {len(projects)} projects")
+            
+            return {
+                "success": True,
+                "message": f"Connected successfully (API v2). Found {len(projects)} projects.",
+                "boards": [{"id": p.key, "name": p.name} for p in projects],
+                "api_version_detected": "v2"
+            }
+        except Exception as e:
+            logger.error(f"[Jira Test v2] Error: {type(e).__name__}: {str(e)}")
+            raise
+
 
     def discover_statuses(self, board_id: str) -> list:
         try:
@@ -314,19 +505,25 @@ class JiraConnector(BaseConnector):
         status_map = self._build_status_map()
         step_names = [s["display_name"] for s in self.workflow_steps]
 
-        all_issues = []
-        start = 0
-        batch = 100
-
-        while True:
-            data = self._search_issues_v3(jql, start, batch)
-            issues = data.get("issues", [])
-            if not issues:
-                break
-            all_issues.extend(issues)
-            if len(issues) < batch:
-                break
-            start += batch
+        # Resolve API version once at start (not per-batch)
+        api_version = self._resolve_api_version()
+        logger.info(f"[Jira Fetch] Using API v{api_version} for data fetch")
+        
+        configured_version = self.config.get("jira_api_version", "auto")
+        
+        # Try the selected API version, fallback to v2 if v3 fails and auto-detect was used
+        try:
+            search_method = self._search_issues_v3 if api_version == "v3" else self._search_issues_v2
+            all_issues = self._fetch_all_issues(search_method, jql)
+        except JiraV3NotSupportedError as e:
+            # If v3 fails and auto-detect was used, try v2
+            if configured_version == "auto":
+                logger.warning(f"[Jira Fetch] v3 search failed (auto-detected): {e}, falling back to v2")
+                all_issues = self._fetch_all_issues(self._search_issues_v2, jql)
+            else:
+                # User explicitly selected v3, don't fallback
+                logger.error(f"[Jira Fetch] v3 search failed (forced): {e}")
+                raise
 
         records = []
         for issue in all_issues:

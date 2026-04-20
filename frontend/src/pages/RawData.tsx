@@ -6,8 +6,8 @@ import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
 import client from '../api/client'
 
 export default function RawData() {
-  const { activeProjectId, weeks, itemType } = useFilterStore()
-  const { data = [], isLoading } = useRawData(activeProjectId)
+  const { activeProjectId, weeks, itemType, setWeeks } = useFilterStore()
+  const { data = [], isLoading } = useRawData(activeProjectId, weeks, itemType)
   const [search, setSearch] = useState('')
 
   if (!activeProjectId) return <EmptyState icon="⊞" title="No project selected" description="Select a project from the sidebar." />
@@ -24,7 +24,7 @@ export default function RawData() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <input
           type="text"
           placeholder="Search…"
@@ -32,6 +32,21 @@ export default function RawData() {
           onChange={e => setSearch(e.target.value)}
           className="bg-surface2 border border-border text-text text-sm rounded-lg px-4 py-2 w-64 focus:outline-none focus:border-primary"
         />
+        
+        <select
+          value={weeks}
+          onChange={e => setWeeks(Number(e.target.value))}
+          className="bg-surface2 border border-border text-text text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-primary"
+        >
+          <option value={4}>Last 4 weeks</option>
+          <option value={12}>Last 12 weeks</option>
+          <option value={26}>Last 26 weeks</option>
+          <option value={52}>Last 52 weeks</option>
+          <option value={104}>Last 2 years</option>
+          <option value={260}>Last 5 years</option>
+          <option value={520}>All data</option>
+        </select>
+        
         <button
           onClick={exportCsv}
           className="bg-surface2 border border-border text-muted2 hover:text-text hover:border-primary text-sm font-medium rounded-lg px-4 py-2 transition-colors"
