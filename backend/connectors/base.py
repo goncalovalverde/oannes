@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import List, Optional
 import pandas as pd
-from typing import List
 
 class BaseConnector(ABC):
-    def __init__(self, project_config: dict, workflow_steps: list):
+    def __init__(self, project_config: dict, workflow_steps: list, since: Optional[datetime] = None):
         self.config = project_config
         self.workflow_steps = workflow_steps
+        self.since = since  # Fetch items created/updated after this timestamp
     
     def _build_status_map(self) -> dict:
         """Map source status names to workflow step display names."""

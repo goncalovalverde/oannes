@@ -500,7 +500,21 @@ class JiraConnector(BaseConnector):
 
     def fetch_items(self) -> pd.DataFrame:
         project_key = self.config.get("project_key", "")
-        jql = self.config.get("jql", f"project = {project_key} ORDER BY created ASC")
+        base_jql = self.config.get("jql", f"project = {project_key} ORDER BY updated DESC")
+        
+        # For incremental syncs, add updated timestamp filter
+        jql = base_jql
+        if self.since:
+            # Format datetime for JQL: 2026-04-20 21:00:00
+            since_str = self.since.strftime("%Y-%m-%d %H:%M:%S")
+            # Add filter for updated since last sync
+            if "WHERE" in base_jql.upper() or "AND" in base_jql.upper():
+                jql = f"{base_jql} AND updated >= '{since_str}'"
+            else:
+                jql = f"{base_jql} AND updated >= '{since_str}'"
+            logger.info(f"[Jira Fetch] Incremental sync since {since_str}")
+        else:
+            logger.info(f"[Jira Fetch] Full sync (no previous sync found)")
 
         status_map = self._build_status_map()
         step_names = [s["display_name"] for s in self.workflow_steps]

@@ -99,34 +99,61 @@ class SyncService:
             }
             for s in project.workflow_steps
         ]
-        connector = get_connector(project.platform, project.config, steps)
+        
+        # Pass last_synced_at as 'since' for incremental syncing
+        connector = get_connector(project.platform, project.config, steps, since=project.last_synced_at)
         return connector.fetch_items()
 
     def _store_items(self, project_id: int, df: pd.DataFrame) -> None:
-        """Replace all cached items for *project_id* atomically.
-
-        Build the new list first; only delete the old rows once the new objects
-        are ready. This prevents a window where the project has zero items if
-        an error occurs during construction.
+        """Merge new/updated items with existing cached items.
+        
+        For incremental syncs, we update existing items (by item_key) and add new ones.
+        This preserves items that haven't been updated since the last sync.
         """
         db = self._db
         new_items: list[CachedItem] = []
+        
+        # Create a map of item_key -> new data for easy lookup
+        new_items_map = {}
         for _, row in df.iterrows():
             ct = row.get("cycle_time_days")
             lt = row.get("lead_time_days")
-            new_items.append(
-                CachedItem(
-                    project_id=project_id,
-                    item_key=str(row.get("item_key", "")),
-                    item_type=str(row.get("item_type", "Unknown")),
-                    creator=str(row.get("creator", "")) if row.get("creator") else None,
-                    created_at=row.get("created_at"),
-                    workflow_timestamps=row.get("workflow_timestamps", {}),
-                    cycle_time_days=ct if ct is not None and pd.notna(ct) else None,
-                    lead_time_days=lt if lt is not None and pd.notna(lt) else None,
-                )
+            item_key = str(row.get("item_key", ""))
+            new_items_map[item_key] = CachedItem(
+                project_id=project_id,
+                item_key=item_key,
+                item_type=str(row.get("item_type", "Unknown")),
+                creator=str(row.get("creator", "")) if row.get("creator") else None,
+                created_at=row.get("created_at"),
+                workflow_timestamps=row.get("workflow_timestamps", {}),
+                cycle_time_days=ct if ct is not None and pd.notna(ct) else None,
+                lead_time_days=lt if lt is not None and pd.notna(lt) else None,
             )
-        # Delete old rows only after successfully building the replacement list.
+        
+        # Get existing items
+        existing_items = db.query(CachedItem).filter(CachedItem.project_id == project_id).all()
+        
+        # Merge: update existing items, keep items not in new data, add new items
+        for existing in existing_items:
+            if existing.item_key in new_items_map:
+                # Update existing item with new data
+                new_item = new_items_map[existing.item_key]
+                existing.item_type = new_item.item_type
+                existing.creator = new_item.creator
+                existing.created_at = new_item.created_at
+                existing.workflow_timestamps = new_item.workflow_timestamps
+                existing.cycle_time_days = new_item.cycle_time_days
+                existing.lead_time_days = new_item.lead_time_days
+                new_items.append(existing)
+                del new_items_map[existing.item_key]
+            else:
+                # Keep existing item (it wasn't in the new sync)
+                new_items.append(existing)
+        
+        # Add any remaining new items
+        new_items.extend(new_items_map.values())
+        
+        # Update all items atomically
         db.query(CachedItem).filter(CachedItem.project_id == project_id).delete()
         db.bulk_save_objects(new_items)
         db.flush()
