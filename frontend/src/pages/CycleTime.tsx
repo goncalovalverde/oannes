@@ -11,8 +11,10 @@ export default function CycleTime() {
   const { data, isLoading } = useCycleTime(activeProjectId, weeks, filterItemType)
   const { data: availableTypes = [] } = useItemTypes(activeProjectId)
   
-  // Local state for multi-select
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set([filterItemType]))
+  // Local state for multi-select - initialize with all available types
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => 
+    new Set(availableTypes)
+  )
 
   if (!activeProjectId) return <EmptyState icon="⏱" title="No project selected" description="Select a project from the sidebar." />
 
