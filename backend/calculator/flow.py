@@ -120,6 +120,42 @@ def throughput(df: pd.DataFrame, done_col: str, weeks: int = 12, granularity: st
     return pivot
 
 
+def cycle_time_by_interval(df: pd.DataFrame, done_col: str, weeks: int = 12, granularity: str = "week") -> pd.DataFrame:
+    """Average cycle time bucketed by granularity (based on completion date)."""
+    if df.empty or done_col not in df.columns or "cycle_time_days" not in df.columns:
+        return pd.DataFrame()
+
+    freq = _resolve_freq(granularity)
+
+    completed = df[df[done_col].notna()].copy()
+    if completed.empty:
+        return pd.DataFrame()
+
+    completed[done_col] = _naive(completed[done_col])
+
+    end = _now()
+    start = end - pd.Timedelta(weeks=weeks)
+
+    completed = completed[(completed[done_col] >= start) & (completed[done_col] < end + pd.Timedelta(days=1))]
+    if completed.empty:
+        return pd.DataFrame()
+
+    date_range = pd.date_range(start=start, end=end, freq=freq)
+
+    completed = completed.set_index(done_col)
+    
+    def avg_ct(group):
+        clean = group["cycle_time_days"].dropna()
+        clean = clean[clean > 0]
+        return clean.mean() if len(clean) > 0 else np.nan
+
+    grouped = completed.groupby(pd.Grouper(freq=freq)).apply(avg_ct)
+    grouped.index.name = "period"
+
+    pivot = grouped.reindex(date_range)
+    return pd.DataFrame({"avg_cycle_time": pivot})
+
+
 def cycle_time_stats(df: pd.DataFrame) -> dict:
     """Percentile statistics for cycle time."""
     if df.empty or "cycle_time_days" not in df.columns:

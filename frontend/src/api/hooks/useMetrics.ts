@@ -31,6 +31,17 @@ export function useCycleTime(projectId: number | null, weeks: number, itemType: 
   })
 }
 
+export function useCycleTimeInterval(projectId: number | null, weeks: number, itemType: string, granularity: Granularity = 'week') {
+  return useQuery<{ period: string; avg_cycle_time: number }[]>({
+    queryKey: ['metrics', projectId, 'cycle-time-interval', weeks, itemType, granularity],
+    queryFn: () =>
+      client
+        .get(`/metrics/${projectId}/cycle-time-interval`, { params: { weeks, item_type: itemType, granularity } })
+        .then(r => r.data.data),
+    enabled: projectId != null,
+  })
+}
+
 export function useLeadTime(projectId: number | null, weeks: number, itemType: string) {
   return useQuery({
     queryKey: ['metrics', projectId, 'lead-time', weeks, itemType],

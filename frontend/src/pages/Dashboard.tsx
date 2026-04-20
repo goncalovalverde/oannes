@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFilterStore } from '../store/filterStore'
-import { useMetricsSummary, useThroughput, useNetFlow, useQualityRate } from '../api/hooks/useMetrics'
+import { useMetricsSummary, useThroughput, useNetFlow, useQualityRate, useCycleTimeInterval } from '../api/hooks/useMetrics'
 import { useProjects } from '../api/hooks/useProjects'
 import KpiCard from '../components/ui/KpiCard'
 import AlertBanner from '../components/ui/AlertBanner'
@@ -9,6 +9,7 @@ import EmptyState from '../components/ui/EmptyState'
 import ThroughputChart from '../components/charts/ThroughputChart'
 import NetFlowChart from '../components/charts/NetFlowChart'
 import QualityChart from '../components/charts/QualityChart'
+import CycleTimeIntervalChart from '../components/charts/CycleTimeIntervalChart'
 import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
 
 type ChartId = 'quality' | 'cycle' | 'throughput' | 'netflow'
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const { data: throughputData = [], isFetching: throughputFetching } = useThroughput(activeProjectId, weeks, itemType, granularity)
   const { data: netFlowData = [], isFetching: netFlowFetching } = useNetFlow(activeProjectId, weeks, itemType, granularity)
   const { data: qualityData = [], isFetching: qualityFetching } = useQualityRate(activeProjectId, weeks, itemType, granularity)
+  const { data: cycleTimeData = [], isFetching: cycleTimeFetching } = useCycleTimeInterval(activeProjectId, weeks, itemType, granularity)
 
   const toggle = (id: ChartId) =>
     setExpanded(prev => {
@@ -126,38 +128,11 @@ export default function Dashboard() {
               <div className="text-xs text-muted mt-0.5">Average days per item, start → done</div>
             </div>
             <div className="flex items-center gap-2">
-              {summary?.cycle_time_avg && (
-                <span className="text-[10px] font-semibold bg-warning/15 text-warning px-2 py-1 rounded-full">Avg: {summary.cycle_time_avg.toFixed(1)}d</span>
-              )}
+              <span className="text-[10px] font-semibold bg-warning/15 text-warning px-2 py-1 rounded-full">{weeks} wks</span>
               <ExpandButton expanded={isExpanded('cycle')} onToggle={() => toggle('cycle')} />
             </div>
           </div>
-          <div className="h-48 flex flex-col items-center justify-center">
-            {summaryLoading ? (
-              <ChartSkeleton />
-            ) : summary?.cycle_time_avg ? (
-              <div className="text-center space-y-4">
-                <div className="text-6xl font-extrabold text-warning">{summary.cycle_time_avg.toFixed(1)}</div>
-                <div className="text-sm text-muted">days average</div>
-                <div className="grid grid-cols-3 gap-4 text-xs">
-                  <div>
-                    <div className="text-muted2">50th</div>
-                    <div className="font-semibold text-success">{summary.cycle_time_50th?.toFixed(0) ?? '—'}d</div>
-                  </div>
-                  <div>
-                    <div className="text-muted2">85th</div>
-                    <div className="font-semibold text-warning">{summary.cycle_time_85th?.toFixed(0) ?? '—'}d</div>
-                  </div>
-                  <div>
-                    <div className="text-muted2">95th</div>
-                    <div className="font-semibold text-danger">{summary.cycle_time_95th?.toFixed(0) ?? '—'}d</div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-muted text-sm">No cycle time data</div>
-            )}
-          </div>
+          {cycleTimeFetching ? <ChartSkeleton /> : <CycleTimeIntervalChart key={String(isExpanded('cycle'))} data={cycleTimeData} />}
           {summary?.cycle_time_85th && (
             <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
               💡 Commit to <strong className="text-text">{summary.cycle_time_85th.toFixed(0)} days</strong> and deliver on time <strong className="text-text">85%</strong> of the time.

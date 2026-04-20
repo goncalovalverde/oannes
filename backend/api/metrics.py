@@ -10,6 +10,7 @@ from models.project import Project
 from models.sync_job import CachedItem
 from calculator.flow import (
     throughput as calc_throughput,
+    cycle_time_by_interval as calc_cycle_time_by_interval,
     cycle_time_stats,
     lead_time_stats,
     cfd as calc_cfd,
@@ -179,6 +180,46 @@ def get_cycle_time(
     stats = cycle_time_stats(df)
     pct = {"p50": stats["p50"], "p85": stats["p85"], "p95": stats["p95"]}
     return {"data": data, "percentiles": pct}
+
+@router.get("/{project_id}/cycle-time-interval")
+def get_cycle_time_interval(
+    project_id: int,
+    weeks: int = Query(12),
+    item_type: str = Query("all"),
+    granularity: Literal["day", "week", "biweek", "month"] = Query("week"),
+    db: Session = Depends(get_db)
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    df = get_items_df(project_id, weeks, item_type, db)
+    if df.empty or "cycle_time_days" not in df.columns:
+        return {"data": []}
+
+    steps = sorted(project.workflow_steps, key=lambda s: s.position)
+    done_steps = [s for s in steps if s.stage == "done"]
+    if not done_steps:
+        return {"data": []}
+
+    done_col = done_steps[-1].display_name
+    if done_col not in df.columns:
+        return {"data": []}
+
+    ct_df = calc_cycle_time_by_interval(df, done_col=done_col, weeks=weeks, granularity=granularity)
+    if ct_df.empty:
+        return {"data": []}
+
+    result = []
+    for idx, row in ct_df.iterrows():
+        avg_ct = row.get("avg_cycle_time")
+        if pd.notna(avg_ct):
+            result.append({
+                "period": idx.strftime("%Y-%m-%d"),
+                "avg_cycle_time": float(round(avg_ct, 2))
+            })
+
+    return {"data": result}
 
 @router.get("/{project_id}/lead-time")
 def get_lead_time(

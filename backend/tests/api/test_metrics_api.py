@@ -684,3 +684,49 @@ class TestDayGranularityApi:
         pid = _create_project(client)
         r = client.get(f"/api/metrics/{pid}/throughput?granularity=quarterly")
         assert r.status_code == 422
+
+    def test_cycle_time_interval_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/cycle-time-interval?weeks=12&granularity=week")
+        assert r.status_code == 200
+        assert "data" in r.json()
+
+    def test_cycle_time_interval_has_period_and_avg(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/cycle-time-interval?weeks=12&granularity=week")
+        assert r.status_code == 200
+        data = r.json()["data"]
+        if data:  # Only check if we have data
+            assert "period" in data[0]
+            assert "avg_cycle_time" in data[0]
+
+    def test_cycle_time_interval_biweek_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/cycle-time-interval?granularity=biweek&weeks=12")
+        assert r.status_code == 200
+
+    def test_cycle_time_interval_month_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/cycle-time-interval?granularity=month&weeks=12")
+        assert r.status_code == 200
+
+    def test_cycle_time_interval_day_returns_200(self, client, db):
+        pid = _create_project(client)
+        _seed_items(db, pid, n=20)
+        r = client.get(f"/api/metrics/{pid}/cycle-time-interval?granularity=day&weeks=4")
+        assert r.status_code == 200
+
+    def test_cycle_time_interval_unknown_project_returns_404(self, client):
+        r = client.get("/api/metrics/9999/cycle-time-interval?weeks=12")
+        assert r.status_code == 404
+
+    def test_cycle_time_interval_empty_project_returns_empty_data(self, client, db):
+        pid = _create_project(client)
+        r = client.get(f"/api/metrics/{pid}/cycle-time-interval?weeks=12")
+        assert r.status_code == 200
+        assert r.json()["data"] == []
+
