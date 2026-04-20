@@ -85,3 +85,32 @@ def client(db):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def sample_project(db):
+    """Create a sample project for testing."""
+    from models.project import Project, WorkflowStep
+    
+    project = Project(
+        name="Test Project",
+        platform="csv",
+        config={"file_path": "/tmp/test.csv"},
+    )
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    
+    # Add workflow steps
+    for i, (name, stage) in enumerate([("Backlog", "queue"), ("In Progress", "start"), ("Done", "done")]):
+        step = WorkflowStep(
+            project_id=project.id,
+            display_name=name,
+            stage=stage,
+            position=i,
+            source_statuses=[name],
+        )
+        db.add(step)
+    db.commit()
+    
+    return project

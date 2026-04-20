@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
+import logging
 from database import get_db, SessionLocal
 from models.sync_job import SyncJob
 from models.project import Project
 from services.sync_service import SyncService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class SyncJobOut(BaseModel):
@@ -36,9 +38,14 @@ def trigger_sync(project_id: int, background_tasks: BackgroundTasks, db: Session
     if not db.query(Project).filter(Project.id == project_id).first():
         raise HTTPException(status_code=404, detail="Project not found")
 
-    job = SyncService(db).create_job(project_id)
-    background_tasks.add_task(_run_sync_background, project_id)
-    return job
+    try:
+        job = SyncService(db).create_job(project_id)
+        background_tasks.add_task(_run_sync_background, project_id)
+        return job
+    except Exception as e:
+        db.rollback()
+        logger.exception(f"Failed to create sync job for project {project_id}")
+        raise HTTPException(status_code=500, detail="Failed to create sync job")
 
 
 @router.get("/{project_id}/status", response_model=SyncJobOut)

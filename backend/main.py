@@ -21,10 +21,16 @@ logger.info("🚀 Oannes Backend Starting (DEBUG mode enabled)")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── startup ──────────────────────────────────────────────────────────────
-    from database import init_db
+    from database import init_db, check_database_integrity
     init_db()
     logger.info("Database initialized")
-
+    
+    try:
+        check_database_integrity()
+    except RuntimeError as e:
+        logger.error(f"Startup failed: {e}")
+        raise
+    
     yield
 
     # ── shutdown ─────────────────────────────────────────────────────────────
