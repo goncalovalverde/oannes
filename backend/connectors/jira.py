@@ -172,25 +172,48 @@ class JiraConnector(BaseConnector):
             "fields": "*all",
         }
         
-        logger.debug(f"[Jira Search] URL: {url}")
-        
         # Get the jira client (has ResilientSession with automatic retry logic)
         jira = self._get_client()
         
-        logger.debug(f"[Jira Search] Making request to {url}...")
+        # Log request details
+        logger.debug(f"[Jira Search] >>> REQUEST")
+        logger.debug(f"[Jira Search]     Method: GET")
+        logger.debug(f"[Jira Search]     URL: {url}")
+        logger.debug(f"[Jira Search]     Params: jql={jql[:100]}..." if len(jql) > 100 else f"[Jira Search]     Params: jql={jql}")
+        logger.debug(f"[Jira Search]     Params: startAt={start}, maxResults={batch}")
+        logger.debug(f"[Jira Search]     Headers: {dict(jira._session.headers)}")
+        
         try:
             # Use jira._session (ResilientSession) for automatic retry logic
             # Note: ResilientSession handles timeout internally, don't override it
             resp = jira._session.get(url, params=params)
-            logger.debug(f"[Jira Search] Response status: {resp.status_code}")
+            
+            # Log response details
+            logger.debug(f"[Jira Search] <<< RESPONSE")
+            logger.debug(f"[Jira Search]     Status Code: {resp.status_code}")
+            logger.debug(f"[Jira Search]     Headers: {dict(resp.headers)}")
+            logger.debug(f"[Jira Search]     Content-Length: {resp.headers.get('content-length', 'unknown')}")
+            logger.debug(f"[Jira Search]     Content-Type: {resp.headers.get('content-type', 'unknown')}")
+            
             resp.raise_for_status()
             data = resp.json()
+            
+            # Log response body summary
+            logger.debug(f"[Jira Search]     Response Body: {len(str(data))} bytes")
+            logger.debug(f"[Jira Search]     Issues Count: {len(data.get('issues', []))}")
+            logger.debug(f"[Jira Search]     Total Issues: {data.get('total', 'unknown')}")
+            
         except Exception as e:
+            logger.error(f"[Jira Search] <<< ERROR RESPONSE")
+            logger.error(f"[Jira Search]     Status: {getattr(e, 'status_code', 'unknown')}")
+            logger.error(f"[Jira Search]     Type: {type(e).__name__}")
+            logger.error(f"[Jira Search]     Message: {str(e)}")
             logger.error(f"[Jira Search] Request failed: {type(e).__name__}: {str(e)}", exc_info=True)
             raise
 
         # Surface any Jira application-level errors embedded in a 200 response
         if "errorMessages" in data and data["errorMessages"]:
+            logger.error(f"[Jira Search] Jira application error: {data['errorMessages']}")
             raise JIRAError(status_code=400, text="; ".join(data["errorMessages"]))
 
         return data
@@ -209,13 +232,18 @@ class JiraConnector(BaseConnector):
                 
                 # Test myself endpoint
                 url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
-                logger.debug("[Jira Test] Sending request with Bearer token using ResilientSession")
+                logger.debug(f"[Jira Test] >>> REQUEST (myself endpoint)")
+                logger.debug(f"[Jira Test]     URL: {url}")
+                logger.debug(f"[Jira Test]     Headers: {dict(jira._session.headers)}")
+                
                 resp = jira._session.get(url)
-                logger.debug(f"[Jira Test] Response status: {resp.status_code}")
-                logger.debug(f"[Jira Test] Response headers: {dict(resp.headers)}")
+                
+                logger.debug(f"[Jira Test] <<< RESPONSE")
+                logger.debug(f"[Jira Test]     Status: {resp.status_code}")
+                logger.debug(f"[Jira Test]     Content-Type: {resp.headers.get('content-type', 'unknown')}")
                 
                 if resp.status_code not in [200, 401]:
-                    logger.debug(f"[Jira Test] Response text (first 500 chars): {resp.text[:500]}")
+                    logger.debug(f"[Jira Test]     Response text (first 500 chars): {resp.text[:500]}")
                 
                 resp.raise_for_status()
                 user = resp.json()
@@ -223,10 +251,19 @@ class JiraConnector(BaseConnector):
                 
                 # Now fetch projects with same auth method
                 url = f"{self.config['url'].rstrip('/')}/rest/api/3/projects"
+                logger.debug(f"[Jira Test] >>> REQUEST (projects endpoint)")
+                logger.debug(f"[Jira Test]     URL: {url}")
+                
                 resp = jira._session.get(url)
+                
+                logger.debug(f"[Jira Test] <<< RESPONSE")
+                logger.debug(f"[Jira Test]     Status: {resp.status_code}")
+                logger.debug(f"[Jira Test]     Content-Length: {resp.headers.get('content-length', 'unknown')}")
+                
                 resp.raise_for_status()
                 data = resp.json()
                 projects = data.get('values', [])
+                logger.debug(f"[Jira Test]     Projects Count: {len(projects)}")
                 
                 return {
                     "success": True,
@@ -236,15 +273,26 @@ class JiraConnector(BaseConnector):
             else:
                 # API token auth - use jira library
                 logger.debug("[Jira Test] Using JIRA library for API token")
+                logger.debug(f"[Jira Test] >>> REQUEST (projects via jira library)")
+                
                 jira = self._get_client()
                 projects = jira.projects()
+                
+                logger.debug(f"[Jira Test] <<< RESPONSE")
+                logger.debug(f"[Jira Test]     Projects Count: {len(projects)}")
                 logger.info(f"[Jira Test] ✅ Connected successfully. Found {len(projects)} projects")
+                
                 return {
                     "success": True,
                     "message": f"Connected successfully. Found {len(projects)} projects.",
                     "boards": [{"id": p.key, "name": p.name} for p in projects]
                 }
         except Exception as e:
+            logger.error(f"[Jira Test] <<< ERROR")
+            logger.error(f"[Jira Test]     Exception Type: {type(e).__name__}")
+            logger.error(f"[Jira Test]     Message: {str(e)}")
+            if hasattr(e, 'status_code'):
+                logger.error(f"[Jira Test]     Status Code: {e.status_code}")
             user_message = _format_jira_error(e, context="during connection test")
             logger.error(f"[Jira Test] ❌ Connection failed: {type(e).__name__}: {str(e)}", exc_info=True)
             return {"success": False, "message": user_message, "boards": []}
