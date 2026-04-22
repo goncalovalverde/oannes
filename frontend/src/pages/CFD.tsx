@@ -6,10 +6,13 @@ import EmptyState from '../components/ui/EmptyState'
 
 export default function CFD() {
   const { activeProjectId, weeks } = useFilterStore()
-  const { data: rawData = [], isLoading } = useCfd(activeProjectId, weeks)
+  const { data: response, isLoading } = useCfd(activeProjectId, weeks)
 
   if (!activeProjectId) return <EmptyState icon="∿" title="No project selected" description="Select a project from the sidebar." />
 
+  // response is MetricResponse { data: [...], stats: {...} }
+  const rawData = response?.data ?? []
+  
   // Transform API data to component format
   // API returns: { date, value, by_type: { stage } }
   // Component expects: { date, stage, count }

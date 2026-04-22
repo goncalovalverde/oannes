@@ -41,6 +41,30 @@ export interface MetricsSummary {
   item_types: string[]
 }
 
+export interface MetricDataPoint {
+  date: string
+  value: number
+  by_type: { [key: string]: any } | null
+}
+
+export interface MetricStats {
+  avg: number | null
+  min: number | null
+  max: number | null
+  p50: number | null
+  p75: number | null
+  p85: number | null
+  p95: number | null
+  trend_pct: number | null
+}
+
+export interface MetricResponse {
+  data: MetricDataPoint[]
+  stats: MetricStats
+  unit: string
+  period: string
+}
+
 export interface ThroughputPoint {
   week: string
   Total: number

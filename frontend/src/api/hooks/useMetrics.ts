@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import client from '../client'
-import type { MetricsSummary, ThroughputPoint, ScatterPoint, WipPoint, CfdPoint, AgingItem, MonteCarloResult } from '../../types'
+import type { MetricsSummary, ThroughputPoint, ScatterPoint, WipPoint, CfdPoint, AgingItem, MonteCarloResult, MetricResponse } from '../../types'
 import type { Granularity } from '../../store/filterStore'
 
 function metricsParams(weeks: number, itemType: string, granularity?: Granularity) {
@@ -51,7 +51,7 @@ export function useLeadTime(projectId: number | null, weeks: number, itemType: s
 }
 
 export function useWip(projectId: number | null, weeks: number) {
-  return useQuery<WipPoint[]>({
+  return useQuery<MetricResponse>({
     queryKey: ['metrics', projectId, 'wip', weeks],
     queryFn: () => client.get(`/metrics/${projectId}/wip`, { params: { weeks } }).then(r => r.data.data),
     enabled: projectId != null,
@@ -59,7 +59,7 @@ export function useWip(projectId: number | null, weeks: number) {
 }
 
 export function useCfd(projectId: number | null, weeks: number = 12) {
-  return useQuery<CfdPoint[]>({
+  return useQuery<MetricResponse>({
     queryKey: ['metrics', projectId, 'cfd', weeks],
     queryFn: () => client.get(`/metrics/${projectId}/cfd`, { params: { weeks } }).then(r => r.data.data),
     enabled: projectId != null,

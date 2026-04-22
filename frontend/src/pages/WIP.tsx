@@ -6,11 +6,14 @@ import EmptyState from '../components/ui/EmptyState'
 
 export default function WIP() {
   const { activeProjectId, weeks } = useFilterStore()
-  const { data: rawData = [], isLoading } = useWip(activeProjectId, weeks)
+  const { data: response, isLoading } = useWip(activeProjectId, weeks)
   const { data: summary } = useMetricsSummary(activeProjectId, weeks, 'all')
 
   if (!activeProjectId) return <EmptyState icon="≋" title="No project selected" description="Select a project from the sidebar." />
 
+  // response is MetricResponse { data: [...], stats: {...} }
+  const rawData = response?.data ?? []
+  
   // Transform API data to component format
   // API returns: { date, value, by_type: { stage } }
   // Component expects: { date, stage, count }
