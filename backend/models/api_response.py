@@ -84,9 +84,9 @@ class MetricDataPoint(BaseModel):
         ...,
         description="Metric value for this period"
     )
-    by_type: Optional[Dict[str, int]] = Field(
+    by_type: Optional[Dict[str, Any]] = Field(
         None,
-        description="Breakdown by item type (optional)"
+        description="Breakdown by item type or stage (optional). Values can be strings or integers."
     )
     
     class Config:
