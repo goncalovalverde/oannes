@@ -48,11 +48,18 @@ export default function Dashboard() {
   const qualityData = qualityResponse?.data ?? []
   const cycleTimeData = cycleTimeResponse?.data ?? []
 
-  // Transform throughput data: { date, value, by_type } → { week, Total }
-  const transformedThroughput = throughputData.map((item: any) => ({
-    week: item.date,
-    Total: item.value || 0,
-  }))
+  // Transform throughput data: { date, value, by_type } → { week, Total, ...itemTypes }
+  const transformedThroughput = throughputData.map((item: any) => {
+    const base = {
+      week: item.date,
+      Total: item.value || 0,
+    }
+    // Spread item types from by_type object if present
+    if (item.by_type && typeof item.by_type === 'object') {
+      return { ...base, ...item.by_type }
+    }
+    return base
+  })
 
   // Transform netflow data: { date, value, by_type } → { week, arrivals, completions, net }
   const transformedNetFlow = netFlowData.map((item: any) => ({

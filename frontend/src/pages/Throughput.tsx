@@ -25,12 +25,19 @@ export default function Throughput() {
   }
 
   // Transform API data (flat list) to ThroughputChart format (grouped by week with item types)
-  // API returns: [{ date: "2023-09-18", value: 1.0, by_type: null }]
+  // API returns: [{ date: "2023-09-18", value: 1.0, by_type: { Task: 1, Bug: 0 } }]
   // Chart expects: [{ week: "2023-W39", Total: 3, Task: 2, Bug: 1 }]
-  const chartData: any[] = rawData.map((item: any) => ({
-    week: item.date,
-    Total: item.value || 0,
-  }))
+  const chartData: any[] = rawData.map((item: any) => {
+    const base = {
+      week: item.date,
+      Total: item.value || 0,
+    }
+    // Spread item types from by_type object if present
+    if (item.by_type && typeof item.by_type === 'object') {
+      return { ...base, ...item.by_type }
+    }
+    return base
+  })
 
   const avg = stats?.avg ?? 0
   const trend = stats?.trend_pct ?? 0

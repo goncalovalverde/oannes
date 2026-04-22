@@ -172,7 +172,7 @@ def get_throughput(
     totals = []
     for idx, row in tp_df.iterrows():
         total = int(row.get("Total", 0))
-        by_type = {col: int(row[col]) for col in tp_df.columns if col != "Total"} if "by_type" in tp_df.columns else None
+        by_type = {col: int(row[col]) for col in tp_df.columns if col != "Total"} or None
         totals.append(total)
         data_points.append(MetricDataPoint(
             date=idx.strftime("%Y-%m-%d"),
