@@ -35,6 +35,16 @@ export default function CycleTime() {
     setSelectedTypes(newSelected)
   }
 
+  if (!isLoading && allScatter.length === 0) {
+    return (
+      <EmptyState 
+        icon="⏱" 
+        title="No data available" 
+        description={`No cycle time data found for the last ${weeks} weeks. Try increasing the time window in the filter, or ensure data has been synced.`}
+      />
+    )
+  }
+
   return (
     <div className="space-y-5">
       {/* Percentile cards */}

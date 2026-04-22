@@ -10,6 +10,16 @@ export default function LeadTime() {
   const { data, isLoading } = useLeadTime(activeProjectId, weeks, itemType)
 
   if (!activeProjectId) return <EmptyState icon="⤳" title="No project selected" description="Select a project from the sidebar." />
+  
+  if (!isLoading && (data?.data?.length ?? 0) === 0) {
+    return (
+      <EmptyState 
+        icon="⤳" 
+        title="No data available" 
+        description={`No lead time data found for the last ${weeks} weeks. Try increasing the time window in the filter, or ensure data has been synced.`}
+      />
+    )
+  }
 
   const stats = data?.stats
   const scatter = data?.data ?? []
