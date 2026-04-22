@@ -6,12 +6,12 @@ import EmptyState from '../components/ui/EmptyState'
 
 export default function Throughput() {
   const { activeProjectId, weeks, itemType, granularity } = useFilterStore()
-  const { data = [], isLoading } = useThroughput(activeProjectId, weeks, itemType, granularity)
+  const { data, isLoading } = useThroughput(activeProjectId, weeks, itemType, granularity)
   const { data: summary } = useMetricsSummary(activeProjectId, weeks, itemType)
 
   if (!activeProjectId) return <EmptyState icon="↑" title="No project selected" description="Select a project from the sidebar." />
   
-  if (!isLoading && data.length === 0) {
+  if (!isLoading && (data?.data?.length ?? 0) === 0) {
     return (
       <EmptyState 
         icon="↑" 
@@ -21,6 +21,7 @@ export default function Throughput() {
     )
   }
 
+  const chartData = data?.data ?? []
   const avg = summary?.throughput_avg ?? 0
   const trend = summary?.throughput_trend_pct ?? 0
 
@@ -32,7 +33,7 @@ export default function Throughput() {
         {[
           { label: 'Average', value: `${avg.toFixed(1)}/wk` },
           { label: 'Trend', value: `${trend >= 0 ? '+' : ''}${trend.toFixed(0)}%` },
-          { label: 'Data points', value: data.length },
+          { label: 'Data points', value: chartData.length },
         ].map(({ label, value }) => (
           <div key={label} className="bg-surface border border-border rounded-xl p-4">
             <div className="text-[11px] font-semibold text-muted uppercase tracking-widest mb-1">{label}</div>
@@ -47,7 +48,7 @@ export default function Throughput() {
           <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{granularityLabel}</span>
         </div>
         <div className="text-xs text-muted mb-4">Items completed per {granularity === 'month' ? 'month' : granularity === 'biweek' ? 'two weeks' : granularity === 'day' ? 'day' : 'week'}, stacked by type</div>
-        {isLoading ? <ChartSkeleton /> : <ThroughputChart data={data} weeks={weeks} />}
+        {isLoading ? <ChartSkeleton /> : <ThroughputChart data={chartData} weeks={weeks} />}
         <div className="mt-4 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
           💡 Your team completes an average of <strong className="text-text">{avg.toFixed(1)} items per week</strong>.
           The dashed line shows the trend over the selected period.

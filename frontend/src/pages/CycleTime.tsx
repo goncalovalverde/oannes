@@ -18,7 +18,8 @@ export default function CycleTime() {
 
   if (!activeProjectId) return <EmptyState icon="⏱" title="No project selected" description="Select a project from the sidebar." />
 
-  // New ResponseEnvelope format: data.stats contains percentiles, data.data contains items
+  // Hook returns MetricResponse with both data items and stats
+  // data.data = items array, data.stats = statistics object
   const stats = data?.stats
   const allScatter = data?.data ?? []
   
