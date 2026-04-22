@@ -717,7 +717,7 @@ def get_net_flow(
     )
 
 
-@router.get("/{project_id}/quality-rate")
+@router.get("/{project_id}/quality-rate", response_model=ResponseEnvelope[MetricResponse])
 def get_quality_rate(
     project_id: int,
     weeks: int = Query(12),
@@ -732,11 +732,27 @@ def get_quality_rate(
 
     df = get_items_df(project_id, weeks, item_type, db)
     if df.empty:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="%",
+                period=granularity
+            )
+        )
 
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
     if not steps:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="%",
+                period=granularity
+            )
+        )
 
     done_steps = [s for s in steps if s.stage == "done"]
     done_col = done_steps[-1].display_name if done_steps else steps[-1].display_name
@@ -744,10 +760,40 @@ def get_quality_rate(
     result_df = calc_quality_rate(df, done_col, weeks, granularity=granularity)
     result_df = trim_leading_empty_buckets(result_df)
     if result_df.empty:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="%",
+                period=granularity
+            )
+        )
 
     result_df["week"] = result_df["week"].dt.strftime("%Y-%m-%d")
-    return {"data": result_df.to_dict(orient="records")}
+    
+    # Convert to MetricDataPoint format: { date, value, by_type }
+    data = []
+    avg_quality = 0
+    for _, row in result_df.iterrows():
+        data.append(MetricDataPoint(
+            date=row["week"],
+            value=float(row.get("quality_pct", 0)),
+            by_type=None
+        ))
+        avg_quality += float(row.get("quality_pct", 0))
+    
+    avg_quality = avg_quality / len(data) if data else 0
+    
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=data,
+            stats=MetricStats(avg=round(avg_quality, 1)),
+            unit="%",
+            period=granularity
+        )
+    )
 
 
 @router.get("/{project_id}/summary", response_model=MetricsSummary)
