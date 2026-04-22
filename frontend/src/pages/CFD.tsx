@@ -6,9 +6,18 @@ import EmptyState from '../components/ui/EmptyState'
 
 export default function CFD() {
   const { activeProjectId, weeks } = useFilterStore()
-  const { data = [], isLoading } = useCfd(activeProjectId, weeks)
+  const { data: rawData = [], isLoading } = useCfd(activeProjectId, weeks)
 
   if (!activeProjectId) return <EmptyState icon="∿" title="No project selected" description="Select a project from the sidebar." />
+
+  // Transform API data to component format
+  // API returns: { date, value, by_type: { stage } }
+  // Component expects: { date, stage, count }
+  const data = rawData.map((item: any) => ({
+    date: item.date,
+    stage: item.by_type?.stage || 'Unknown',
+    count: item.value,
+  }))
 
   return (
     <div className="space-y-5">
