@@ -32,7 +32,7 @@ export function useCycleTime(projectId: number | null, weeks: number, itemType: 
 }
 
 export function useCycleTimeInterval(projectId: number | null, weeks: number, itemType: string, granularity: Granularity = 'week') {
-  return useQuery<{ period: string; avg_cycle_time: number }[]>({
+  return useQuery<MetricResponse>({
     queryKey: ['metrics', projectId, 'cycle-time-interval', weeks, itemType, granularity],
     queryFn: () =>
       client
@@ -97,7 +97,7 @@ export function useMonteCarlo() {
 }
 
 export function useNetFlow(projectId: number | null, weeks: number, itemType: string, granularity: Granularity = 'week') {
-  return useQuery<{ week: string; arrivals: number; completions: number; net: number }[]>({
+  return useQuery<MetricResponse>({
     queryKey: ['metrics', projectId, 'net-flow', weeks, itemType, granularity],
     queryFn: () =>
       client
@@ -108,7 +108,7 @@ export function useNetFlow(projectId: number | null, weeks: number, itemType: st
 }
 
 export function useQualityRate(projectId: number | null, weeks: number, itemType: string, granularity: Granularity = 'week') {
-  return useQuery<{ week: string; total: number; bugs: number; quality_pct: number }[]>({
+  return useQuery<MetricResponse>({
     queryKey: ['metrics', projectId, 'quality-rate', weeks, itemType, granularity],
     queryFn: () =>
       client

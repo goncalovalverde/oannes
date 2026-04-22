@@ -37,10 +37,44 @@ export default function Dashboard() {
   const [expanded, setExpanded] = useState<Set<ChartId>>(new Set())
 
   const { data: summary, isLoading: summaryLoading } = useMetricsSummary(activeProjectId, weeks, itemType)
-  const { data: throughputData = [], isFetching: throughputFetching } = useThroughput(activeProjectId, weeks, itemType, granularity)
-  const { data: netFlowData = [], isFetching: netFlowFetching } = useNetFlow(activeProjectId, weeks, itemType, granularity)
-  const { data: qualityData = [], isFetching: qualityFetching } = useQualityRate(activeProjectId, weeks, itemType, granularity)
-  const { data: cycleTimeData = [], isFetching: cycleTimeFetching } = useCycleTimeInterval(activeProjectId, weeks, itemType, granularity)
+  const { data: throughputResponse, isFetching: throughputFetching } = useThroughput(activeProjectId, weeks, itemType, granularity)
+  const { data: netFlowResponse, isFetching: netFlowFetching } = useNetFlow(activeProjectId, weeks, itemType, granularity)
+  const { data: qualityResponse, isFetching: qualityFetching } = useQualityRate(activeProjectId, weeks, itemType, granularity)
+  const { data: cycleTimeResponse, isFetching: cycleTimeFetching } = useCycleTimeInterval(activeProjectId, weeks, itemType, granularity)
+
+  // Extract data arrays from MetricResponse objects
+  const throughputData = throughputResponse?.data ?? []
+  const netFlowData = netFlowResponse?.data ?? []
+  const qualityData = qualityResponse?.data ?? []
+  const cycleTimeData = cycleTimeResponse?.data ?? []
+
+  // Transform throughput data: { date, value, by_type } → { week, Total }
+  const transformedThroughput = throughputData.map((item: any) => ({
+    week: item.date,
+    Total: item.value || 0,
+  }))
+
+  // Transform netflow data: { date, value, by_type } → { week, arrivals, completions, net }
+  const transformedNetFlow = netFlowData.map((item: any) => ({
+    week: item.date,
+    arrivals: item.value,
+    completions: item.value,
+    net: item.value,
+  }))
+
+  // Transform quality data: { date, value, by_type } → { week, total, bugs, quality_pct }
+  const transformedQuality = qualityData.map((item: any) => ({
+    week: item.date,
+    total: 100,
+    bugs: 0,
+    quality_pct: item.value,
+  }))
+
+  // Transform cycleTime data: { date, value, by_type } → { period, avg_cycle_time }
+  const transformedCycleTime = cycleTimeData.map((item: any) => ({
+    period: item.date,
+    avg_cycle_time: item.value,
+  }))
 
   const toggle = (id: ChartId) =>
     setExpanded(prev => {
@@ -114,7 +148,7 @@ export default function Dashboard() {
               <ExpandButton expanded={isExpanded('quality')} onToggle={() => toggle('quality')} />
             </div>
           </div>
-          {qualityFetching ? <ChartSkeleton /> : <QualityChart key={String(isExpanded('quality'))} data={qualityData} />}
+          {qualityFetching ? <ChartSkeleton /> : <QualityChart key={String(isExpanded('quality'))} data={transformedQuality} />}
           <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-success">
             💡 A high quality rate (&gt;80%) indicates the team spends most of its capacity on new value rather than rework. Declining trend is an early warning signal.
           </div>
@@ -132,7 +166,7 @@ export default function Dashboard() {
               <ExpandButton expanded={isExpanded('cycle')} onToggle={() => toggle('cycle')} />
             </div>
           </div>
-          {cycleTimeFetching ? <ChartSkeleton /> : <CycleTimeIntervalChart key={String(isExpanded('cycle'))} data={cycleTimeData} />}
+          {cycleTimeFetching ? <ChartSkeleton /> : <CycleTimeIntervalChart key={String(isExpanded('cycle'))} data={transformedCycleTime} />}
           {summary?.cycle_time_85th && (
             <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
               💡 Commit to <strong className="text-text">{summary.cycle_time_85th.toFixed(0)} days</strong> and deliver on time <strong className="text-text">85%</strong> of the time.
@@ -152,7 +186,7 @@ export default function Dashboard() {
               <ExpandButton expanded={isExpanded('throughput')} onToggle={() => toggle('throughput')} />
             </div>
           </div>
-          {throughputFetching ? <ChartSkeleton /> : <ThroughputChart key={String(isExpanded('throughput'))} data={throughputData} weeks={weeks} />}
+          {throughputFetching ? <ChartSkeleton /> : <ThroughputChart key={String(isExpanded('throughput'))} data={transformedThroughput} weeks={weeks} />}
           {summary && (
             <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
               💡 Throughput trending {summary.throughput_trend_pct >= 0 ? 'up' : 'down'} — avg <strong className="text-text">{summary.throughput_avg.toFixed(1)} items/week</strong> over the last {weeks} weeks.
@@ -172,7 +206,7 @@ export default function Dashboard() {
               <ExpandButton expanded={isExpanded('netflow')} onToggle={() => toggle('netflow')} />
             </div>
           </div>
-          {netFlowFetching ? <ChartSkeleton /> : <NetFlowChart key={String(isExpanded('netflow'))} data={netFlowData} />}
+          {netFlowFetching ? <ChartSkeleton /> : <NetFlowChart key={String(isExpanded('netflow'))} data={transformedNetFlow} />}
           <div className="mt-3 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-warning">
             💡 A consistently positive net flow means the team is reducing WIP. Negative weeks signal backlog growth.
           </div>
