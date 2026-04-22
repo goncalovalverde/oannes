@@ -116,6 +116,55 @@ def compute_cycle_and_lead(df: pd.DataFrame, workflow_steps: list) -> pd.DataFra
     return df
 
 
+def compute_workflow_timestamps_from_transitions(
+    transitions: list,
+    workflow_steps: list,
+) -> dict:
+    """Derive workflow_timestamps from raw status_transitions + current workflow config.
+
+    Arguments:
+        transitions: list of {"from_status": str|None, "to_status": str, "transitioned_at": ISO str}
+        workflow_steps: list of {"display_name": str, "source_statuses": list, "stage": str, "position": int}
+
+    Returns:
+        dict mapping display_name → ISO timestamp string (or None if never reached).
+
+    Semantics:
+        - Records the FIRST time an issue reached each workflow step.
+        - If an issue is reopened (Done → In Progress → Done again), the first Done
+          timestamp is preserved.
+    """
+    if not transitions or not workflow_steps:
+        return {}
+
+    # Build a map: source_status → display_name
+    status_to_step = {}
+    for step in workflow_steps:
+        for source_status in step.get("source_statuses", []):
+            status_to_step[source_status] = step["display_name"]
+
+    # Track first arrival at each step
+    step_arrivals = {}
+
+    for trans in transitions:
+        to_status = trans.get("to_status")
+        if not to_status or to_status not in status_to_step:
+            continue
+
+        step_name = status_to_step[to_status]
+        if step_name not in step_arrivals:
+            # First time reaching this step
+            step_arrivals[step_name] = trans.get("transitioned_at")
+
+    # Build result: all steps, but only with timestamps if they were reached
+    result = {}
+    for step in workflow_steps:
+        display_name = step["display_name"]
+        result[display_name] = step_arrivals.get(display_name)
+
+    return result
+
+
 def _now() -> pd.Timestamp:
     """Current time as a tz-naive timestamp (avoids pandas 2.x utcnow quirks)."""
     from datetime import datetime
