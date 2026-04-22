@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 class TrelloConnector(BaseConnector):
     BASE_URL = "https://api.trello.com/1"
     
-    def __init__(self, config: dict, workflow_steps: list):
-        super().__init__(config, workflow_steps)
+    def __init__(self, config: dict, workflow_steps: list, since=None):
+        super().__init__(config, workflow_steps, since=since)
         self.api_key = config.get("api_key", "")
         self.token = config.get("token", "")
     
@@ -83,6 +83,7 @@ class TrelloConnector(BaseConnector):
                 "creator": None,
                 "created_at": pd.to_datetime(card.get("dateLastActivity")),
                 "workflow_timestamps": {k: v.isoformat() if v else None for k, v in timestamps.items()},
+                "status_transitions": [],
             }
             
             start_steps = [s for s in self.workflow_steps if s["stage"] == "start"]

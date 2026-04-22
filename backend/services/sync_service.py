@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import pandas as pd
 from sqlalchemy.orm import Session
 
+from calculator.flow import compute_workflow_timestamps_from_transitions, compute_cycle_and_lead
 from connectors import get_connector
 from models.project import Project
 from models.sync_job import CachedItem, SyncJob
@@ -80,6 +81,15 @@ class SyncService:
             db.commit()
             raise
 
+    def import_from_dataframe(self, project_id: int, df: pd.DataFrame) -> int:
+        """Import items from a pre-built DataFrame. Returns item count.
+        
+        Public API for storing items from CSV uploads or other sources.
+        Used by csv-upload and test endpoints.
+        """
+        self._store_items(project_id, df)
+        return len(df)
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -105,55 +115,109 @@ class SyncService:
         return connector.fetch_items()
 
     def _store_items(self, project_id: int, df: pd.DataFrame) -> None:
-        """Merge new/updated items with existing cached items.
+        """Upsert cached items by item_key — preserves items not in this fetch window.
+
+        For incremental syncs the connector returns only recently-updated items.
+        Using upsert-by-key ensures that older items are not lost.
         
-        For incremental syncs, we update existing items (by item_key) and add new ones.
-        This preserves items that haven't been updated since the last sync.
+        OPTIMIZED: bulk-loads all existing keys in a single query (N+1 elimination).
         """
-        db = self._db
-        new_items: list[CachedItem] = []
+        if df.empty:
+            return
         
-        # Create a map of item_key -> new data for easy lookup
-        new_items_map = {}
+        db = self._db
+        
+        # Bulk-load all existing items for this project in ONE query
+        item_keys = [str(r) for r in df["item_key"]]
+        existing_items = db.query(CachedItem).filter(
+            CachedItem.project_id == project_id,
+            CachedItem.item_key.in_(item_keys)
+        ).all()
+        existing_map = {item.item_key: item for item in existing_items}
+
+        # Now iterate through new/updated items with O(1) lookup
         for _, row in df.iterrows():
+            item_key = str(row.get("item_key", ""))
             ct = row.get("cycle_time_days")
             lt = row.get("lead_time_days")
-            item_key = str(row.get("item_key", ""))
-            new_items_map[item_key] = CachedItem(
-                project_id=project_id,
-                item_key=item_key,
-                item_type=str(row.get("item_type", "Unknown")),
-                creator=str(row.get("creator", "")) if row.get("creator") else None,
-                created_at=row.get("created_at"),
-                workflow_timestamps=row.get("workflow_timestamps", {}),
-                cycle_time_days=ct if ct is not None and pd.notna(ct) else None,
-                lead_time_days=lt if lt is not None and pd.notna(lt) else None,
-            )
-        
-        # Get existing items
-        existing_items = db.query(CachedItem).filter(CachedItem.project_id == project_id).all()
-        
-        # Merge: update existing items, keep items not in new data, add new items
-        for existing in existing_items:
-            if existing.item_key in new_items_map:
-                # Update existing item with new data
-                new_item = new_items_map[existing.item_key]
-                existing.item_type = new_item.item_type
-                existing.creator = new_item.creator
-                existing.created_at = new_item.created_at
-                existing.workflow_timestamps = new_item.workflow_timestamps
-                existing.cycle_time_days = new_item.cycle_time_days
-                existing.lead_time_days = new_item.lead_time_days
-                new_items.append(existing)
-                del new_items_map[existing.item_key]
+            transitions = row.get("status_transitions")
+            if isinstance(transitions, float):
+                transitions = None  # NaN from DataFrame
+
+            existing = existing_map.get(item_key)
+            
+            if existing:
+                existing.item_type = str(row.get("item_type", "Unknown"))
+                existing.creator = str(row.get("creator", "")) if row.get("creator") else None
+                existing.created_at = row.get("created_at")
+                existing.workflow_timestamps = row.get("workflow_timestamps", {})
+                existing.cycle_time_days = ct if ct is not None and pd.notna(ct) else None
+                existing.lead_time_days = lt if lt is not None and pd.notna(lt) else None
+                if transitions is not None:
+                    existing.status_transitions = transitions
             else:
-                # Keep existing item (it wasn't in the new sync)
-                new_items.append(existing)
-        
-        # Add any remaining new items
-        new_items.extend(new_items_map.values())
-        
-        # Update all items atomically
-        db.query(CachedItem).filter(CachedItem.project_id == project_id).delete()
-        db.bulk_save_objects(new_items)
+                db.add(CachedItem(
+                    project_id=project_id,
+                    item_key=item_key,
+                    item_type=str(row.get("item_type", "Unknown")),
+                    creator=str(row.get("creator", "")) if row.get("creator") else None,
+                    created_at=row.get("created_at"),
+                    workflow_timestamps=row.get("workflow_timestamps", {}),
+                    cycle_time_days=ct if ct is not None and pd.notna(ct) else None,
+                    lead_time_days=lt if lt is not None and pd.notna(lt) else None,
+                    status_transitions=transitions,
+                ))
+
         db.flush()
+
+    def recompute_workflow_timestamps(self, project_id: int) -> dict:
+        """Recompute workflow_timestamps/cycle_time/lead_time from stored status_transitions.
+
+        Called when the workflow configuration changes so that metric values stay
+        consistent with the new step mapping without requiring a full re-sync.
+
+        Returns:
+            {"recomputed": N, "skipped": N}  – skipped items have NULL transitions
+        """
+        db = self._db
+        project = db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise ValueError(f"Project {project_id} not found")
+
+        steps = [
+            {
+                "display_name": s.display_name,
+                "source_statuses": s.source_statuses,
+                "stage": s.stage,
+                "position": s.position,
+            }
+            for s in project.workflow_steps
+        ]
+
+        items = db.query(CachedItem).filter(CachedItem.project_id == project_id).all()
+        recomputed = 0
+        skipped = 0
+
+        for item in items:
+            if item.status_transitions is None:
+                skipped += 1
+                continue
+
+            new_timestamps = compute_workflow_timestamps_from_transitions(
+                item.status_transitions, steps
+            )
+            item.workflow_timestamps = new_timestamps
+
+            # Recompute cycle/lead time via the shared calculator
+            row: dict = {"created_at": item.created_at}
+            row.update({k: pd.Timestamp(v) if v else pd.NaT for k, v in new_timestamps.items()})
+            tmp_df = pd.DataFrame([row])
+            tmp_df = compute_cycle_and_lead(tmp_df, steps)
+            item.cycle_time_days = tmp_df["cycle_time_days"].iloc[0] if "cycle_time_days" in tmp_df.columns else None
+            item.lead_time_days = tmp_df["lead_time_days"].iloc[0] if "lead_time_days" in tmp_df.columns else None
+            recomputed += 1
+
+        db.commit()
+        logger.info("Recomputed workflow timestamps for project %s: %d items, %d skipped", project_id, recomputed, skipped)
+        return {"recomputed": recomputed, "skipped": skipped}
+

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Literal, Optional
 from pydantic import BaseModel
@@ -80,6 +80,7 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{project_id}", response_model=ProjectOut)
 def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(get_db)):
+    from services.sync_service import SyncService
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -89,13 +90,22 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
         project.platform = data.platform
     if data.config is not None:
         project.config = data.config
-    if data.workflow_steps is not None:
+    workflow_changed = data.workflow_steps is not None
+    if workflow_changed:
         db.query(WorkflowStep).filter(WorkflowStep.project_id == project_id).delete()
         for step in data.workflow_steps:
             ws = WorkflowStep(project_id=project.id, **step.model_dump())
             db.add(ws)
     db.commit()
     db.refresh(project)
+    if workflow_changed:
+        try:
+            SyncService(db).recompute_workflow_timestamps(project_id)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "recompute_workflow_timestamps failed for project %s", project_id, exc_info=True
+            )
     return project
 
 @router.delete("/{project_id}")

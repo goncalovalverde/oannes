@@ -1,6 +1,8 @@
 import pandas as pd
 import logging
 import requests
+import time
+import re
 from datetime import datetime
 from connectors.base import BaseConnector
 from jira import JIRAError
@@ -61,6 +63,12 @@ def _format_jira_error(error: Exception, context: str = "") -> str:
                 f"Invalid Jira request. {context} "
                 "Check your project key and configuration."
             )
+        elif status == 429:
+            return (
+                "Jira rate limit exceeded. The system will automatically retry up to 3 times with backoff. "
+                "If this keeps happening, increase the 'Request Delay' setting in your project configuration to 200-500ms. "
+                "Jira allows 4 requests per 60 seconds by default."
+            )
         elif status == 500:
             return (
                 "Jira server error (500). The Jira instance may be down or misconfigured. "
@@ -106,8 +114,8 @@ def _format_jira_error(error: Exception, context: str = "") -> str:
     return f"Jira connection error: {error_str[:100]}"
 
 class JiraConnector(BaseConnector):
-    def __init__(self, config: dict, workflow_steps: list):
-        super().__init__(config, workflow_steps)
+    def __init__(self, config: dict, workflow_steps: list, since=None):
+        super().__init__(config, workflow_steps, since=since)
         self._jira = None
 
     def _get_auth_headers(self) -> dict:
@@ -216,6 +224,67 @@ class JiraConnector(BaseConnector):
             # For non-version errors (network, SSL, timeout), don't assume v2
             logger.debug(f"[Jira API] Non-version error during v3 test: {type(e).__name__}: {e}")
             raise
+
+    def _retry_with_rate_limit_backoff(self, func, *args, max_retries=3, **kwargs):
+        """Retry a function with automatic backoff for Jira rate limiting (429 errors).
+        
+        Handles HTTP 429 responses by:
+        1. Extracting Retry-After header or default wait time
+        2. Waiting the specified duration
+        3. Retrying the request
+        
+        Args:
+            func: Callable to retry
+            *args: Positional arguments for func
+            max_retries: Maximum number of retry attempts (default: 3)
+            **kwargs: Keyword arguments for func
+            
+        Returns:
+            Result of func if successful
+            
+        Raises:
+            JIRAError: If all retries are exhausted or other errors occur
+        """
+        import re
+        
+        for attempt in range(max_retries + 1):
+            try:
+                return func(*args, **kwargs)
+            except JIRAError as e:
+                if e.status_code == 429:
+                    if attempt < max_retries:
+                        # Extract retry-after time from error or use default exponential backoff
+                        retry_after = 5 + (2 ** attempt)  # 5, 7, 11, 19 seconds
+                        error_text = str(e)
+                        
+                        # Try to extract Retry-After from error message
+                        if "after" in error_text.lower():
+                            try:
+                                match = re.search(r'after\s+(\d+)\s+seconds', error_text.lower())
+                                if match:
+                                    retry_after = int(match.group(1))
+                            except Exception:
+                                pass  # Use default backoff
+                        
+                        logger.warning(
+                            f"[Jira Rate Limit] Hit rate limit (429). "
+                            f"Attempt {attempt + 1}/{max_retries + 1}. "
+                            f"Waiting {retry_after} seconds before retry..."
+                        )
+                        time.sleep(retry_after)
+                        continue
+                    else:
+                        logger.error(
+                            f"[Jira Rate Limit] Exhausted retries after {max_retries} attempts. "
+                            f"Rate limit error: {e}"
+                        )
+                        raise
+                else:
+                    # Non-429 errors should not be retried
+                    raise
+            except Exception as e:
+                # Non-JIRAError exceptions should not be retried
+                raise
 
     def _search_issues_v2(self, jql: str, start: int, batch: int) -> dict:
         """Call Jira Server/Data Center REST API v2 /search.
@@ -333,9 +402,13 @@ class JiraConnector(BaseConnector):
         all_issues = []
         start = 0
         batch = 100
+        
+        # Get request delay from config (default 100ms)
+        request_delay_ms = int(self.config.get("request_delay_ms", 100))
+        request_delay_sec = request_delay_ms / 1000.0
 
         while True:
-            data = search_method(jql, start, batch)
+            data = self._retry_with_rate_limit_backoff(search_method, jql, start, batch)
             issues = data.get("issues", [])
             if not issues:
                 break
@@ -343,6 +416,9 @@ class JiraConnector(BaseConnector):
             if len(issues) < batch:
                 break
             start += batch
+            # Add delay between requests to avoid rate limiting
+            if request_delay_sec > 0:
+                time.sleep(request_delay_sec)
         
         return all_issues
 
@@ -505,13 +581,19 @@ class JiraConnector(BaseConnector):
         # For incremental syncs, add updated timestamp filter
         jql = base_jql
         if self.since:
-            # Format datetime for JQL: 2026-04-20 21:00:00
-            since_str = self.since.strftime("%Y-%m-%d %H:%M:%S")
-            # Add filter for updated since last sync
-            if "WHERE" in base_jql.upper() or "AND" in base_jql.upper():
-                jql = f"{base_jql} AND updated >= '{since_str}'"
+            # Format datetime for JQL: 2026-04-20 21:00 (no seconds - Jira v2 API requirement)
+            since_str = self.since.strftime("%Y-%m-%d %H:%M")
+            # Add filter for updated since last sync (insert before ORDER BY if present)
+            since_filter = f"updated >= '{since_str}'"
+            
+            # Check if JQL has ORDER BY clause
+            if "ORDER BY" in base_jql.upper():
+                # Insert the filter before ORDER BY
+                parts = base_jql.upper().split("ORDER BY")
+                jql = parts[0].rstrip() + f" AND {since_filter} ORDER BY " + parts[1].strip()
             else:
-                jql = f"{base_jql} AND updated >= '{since_str}'"
+                # Just append if no ORDER BY
+                jql = f"{base_jql} AND {since_filter}"
             logger.info(f"[Jira Fetch] Incremental sync since {since_str}")
         else:
             logger.info(f"[Jira Fetch] Full sync (no previous sync found)")
@@ -545,12 +627,40 @@ class JiraConnector(BaseConnector):
             changelog = issue.get("changelog", {})
             timestamps = {name: None for name in step_names}
 
-            for history in changelog.get("histories", []):
+            # Collect ALL status transitions for storage (raw, un-mapped)
+            raw_transitions: list = []
+
+            # Synthetic initial transition: Jira changelog only records changes, not
+            # the starting state. Add a transition at created_at using current status.
+            created_at_ts = fields.get("created")
+            initial_status = (fields.get("status") or {}).get("name")
+            if initial_status and created_at_ts:
+                raw_transitions.append({
+                    "from_status": None,
+                    "to_status": initial_status,
+                    "transitioned_at": created_at_ts,
+                })
+
+            # Determine if changelog is truncated (Jira may return only ~100 entries)
+            histories = changelog.get("histories", [])
+            cl_total = changelog.get("total", len(histories))
+            if cl_total > len(histories):
+                # Paginate the full changelog from the per-issue endpoint
+                histories = self._fetch_full_changelog(issue["key"])
+
+            for history in histories:
                 created = pd.to_datetime(history["created"])
                 for item in history.get("items", []):
                     if item.get("field") == "status":
-                        to_status = (item.get("toString") or "").lower()
-                        step_name = status_map.get(to_status)
+                        from_status = item.get("fromString")
+                        to_raw = item.get("toString") or ""
+                        raw_transitions.append({
+                            "from_status": from_status,
+                            "to_status": to_raw,
+                            "transitioned_at": history["created"],
+                        })
+                        to_lower = to_raw.lower()
+                        step_name = status_map.get(to_lower)
                         if step_name and timestamps.get(step_name) is None:
                             timestamps[step_name] = created
 
@@ -562,6 +672,7 @@ class JiraConnector(BaseConnector):
                 "workflow_timestamps": {
                     k: v.isoformat() if v else None for k, v in timestamps.items()
                 },
+                "status_transitions": raw_transitions,
             }
 
             start_steps = [s for s in self.workflow_steps if s["stage"] == "start"]
@@ -600,3 +711,35 @@ class JiraConnector(BaseConnector):
             records.append(record)
 
         return pd.DataFrame(records)
+
+    def _fetch_full_changelog(self, issue_key: str) -> list:
+        """Paginate /rest/api/2/issue/{key}/changelog to retrieve all history entries.
+
+        The search API with expand=changelog may return only the last ~100 entries.
+        This method fetches the complete history when that happens.
+        """
+        jira = self._get_client()
+        base_url = self.config["url"].rstrip("/")
+        url = f"{base_url}/rest/api/2/issue/{issue_key}/changelog"
+        all_histories: list = []
+        start = 0
+        batch = 100
+
+        while True:
+            params = {"startAt": start, "maxResults": batch}
+            try:
+                resp = self._retry_with_rate_limit_backoff(
+                    lambda p=params: jira._session.get(url, params=p)
+                )
+                data = resp.json()
+            except Exception:
+                logger.warning("[Jira Changelog] Failed to paginate changelog for %s, using partial data", issue_key)
+                break
+
+            values = data.get("values", [])
+            all_histories.extend(values)
+            if len(values) < batch or len(all_histories) >= data.get("total", 0):
+                break
+            start += batch
+
+        return all_histories

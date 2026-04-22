@@ -88,6 +88,7 @@ class LinearConnector(BaseConnector):
                 "creator": issue.get("creator", {}).get("name") if issue.get("creator") else None,
                 "created_at": pd.to_datetime(issue["createdAt"]),
                 "workflow_timestamps": {k: v.isoformat() if v else None for k, v in timestamps.items()},
+                "status_transitions": [],
             }
             
             start_steps = [s for s in self.workflow_steps if s["stage"] == "start"]

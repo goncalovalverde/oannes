@@ -46,6 +46,42 @@ def _naive(series: pd.Series) -> pd.Series:
         return series.dt.tz_convert("UTC").dt.tz_localize(None)
     return series
 
+def trim_leading_empty_buckets(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove leading empty buckets from time-series DataFrame.
+    
+    A bucket is considered empty if all numeric columns are zero or NaN.
+    Preserves the index (typically datetime).
+    
+    Args:
+        df: DataFrame with time-series data (typically indexed by date)
+        
+    Returns:
+        DataFrame with leading empty buckets removed
+    """
+    if df.empty:
+        return df
+    
+    # Find numeric columns
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    if not numeric_cols:
+        return df
+    
+    # Find first row with any non-zero, non-NaN numeric value
+    has_data = ((df[numeric_cols] != 0).any(axis=1)) & (df[numeric_cols].notna().any(axis=1))
+    
+    if not has_data.any():
+        # All rows are empty, return as is
+        return df
+    
+    # Find the first row with data (use idxmax to get the first True)
+    first_data_idx = has_data.idxmax() if has_data.any() else df.index[0]
+    
+    # Return from first data row onward
+    if first_data_idx == df.index[0]:
+        return df
+    
+    return df.loc[first_data_idx:]
+
 def compute_cycle_and_lead(df: pd.DataFrame, workflow_steps: list) -> pd.DataFrame:
     """Compute cycle_time_days and lead_time_days from workflow step timestamps.
 
@@ -64,15 +100,18 @@ def compute_cycle_and_lead(df: pd.DataFrame, workflow_steps: list) -> pd.DataFra
         start_col = start_steps[0]["display_name"]
         done_col = done_steps[-1]["display_name"]
         if start_col in df.columns and done_col in df.columns:
-            df["cycle_time_days"] = (df[done_col] - df[start_col]).dt.days
+            # Ensure both columns are tz-naive before subtraction to avoid timezone mismatch errors
+            df["cycle_time_days"] = (_naive(df[done_col]) - _naive(df[start_col])).dt.days
 
     first_col = steps[0]["display_name"] if steps else None
     if done_steps and first_col:
         done_col = done_steps[-1]["display_name"]
         if first_col in df.columns and done_col in df.columns:
-            df["lead_time_days"] = (df[done_col] - df[first_col]).dt.days
+            # Ensure both columns are tz-naive before subtraction to avoid timezone mismatch errors
+            df["lead_time_days"] = (_naive(df[done_col]) - _naive(df[first_col])).dt.days
         elif "created_at" in df.columns and done_col in df.columns:
-            df["lead_time_days"] = (df[done_col] - df["created_at"]).dt.days
+            # Ensure both columns are tz-naive before subtraction to avoid timezone mismatch errors
+            df["lead_time_days"] = (_naive(df[done_col]) - _naive(df["created_at"])).dt.days
 
     return df
 
@@ -296,7 +335,8 @@ def aging_wip(df: pd.DataFrame, workflow_steps: list) -> pd.DataFrame:
             in_progress = in_progress[in_progress[done_col].isna()]
 
     now = _now()
-    in_progress["age_days"] = (now - in_progress[start_col]).dt.days
+    # Ensure start_col is tz-naive before subtraction to avoid timezone mismatch errors
+    in_progress["age_days"] = (now - _naive(in_progress[start_col])).dt.days
     return in_progress
 
 

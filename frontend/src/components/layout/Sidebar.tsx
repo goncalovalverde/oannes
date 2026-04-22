@@ -1,8 +1,9 @@
+import { useRef } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import { useProjects } from '../../api/hooks/useProjects'
 import { useFilterStore } from '../../store/filterStore'
-import { useSyncStatus, useTriggerSync } from '../../api/hooks/useSync'
+import { useSyncStatus, useTriggerSync, useCsvUploadSync } from '../../api/hooks/useSync'
 import { formatDistanceToNow } from 'date-fns'
 
 const NAV = [
@@ -30,12 +31,14 @@ export default function Sidebar() {
 
   const { data: syncJob } = useSyncStatus(activeProject?.id ?? null)
   const { mutate: triggerSync, isPending: isSyncing } = useTriggerSync()
+  const { mutate: csvUpload, isPending: isCsvUploading } = useCsvUploadSync()
+  const csvFileRef = useRef<HTMLInputElement>(null)
 
   const lastSynced = activeProject?.last_synced_at
     ? formatDistanceToNow(new Date(activeProject.last_synced_at), { addSuffix: true })
     : 'Never'
 
-  const isSyncActive = syncJob?.status === 'running' || syncJob?.status === 'pending' || isSyncing
+  const isSyncActive = syncJob?.status === 'running' || syncJob?.status === 'pending' || isSyncing || isCsvUploading
 
   const handleSyncClick = () => {
     if (!activeProject) return
@@ -48,6 +51,13 @@ export default function Sidebar() {
     }
 
     triggerSync(activeProject.id)
+  }
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !activeProject) return
+    csvUpload({ projectId: activeProject.id, file })
+    e.target.value = ''
   }
 
   return (
@@ -117,12 +127,31 @@ export default function Sidebar() {
           )} style={{ boxShadow: isSyncActive ? '0 0 6px #f59e0b' : '0 0 6px #22c55e' }} />
           <span>{isSyncActive ? 'Syncing…' : `Synced ${lastSynced}`}</span>
         </div>
-        <button
-          onClick={handleSyncClick}
-          className="w-full text-xs font-medium text-muted2 border border-border rounded-md py-1.5 hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          ↻ Sync Now
-        </button>
+        {activeProject?.platform === 'csv' ? (
+          <>
+            <input
+              ref={csvFileRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={handleCsvFileChange}
+            />
+            <button
+              onClick={() => csvFileRef.current?.click()}
+              disabled={isSyncActive}
+              className="w-full text-xs font-medium text-muted2 border border-border rounded-md py-1.5 hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isCsvUploading ? '⏳ Importing…' : '↑ Upload File'}
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={handleSyncClick}
+            className="w-full text-xs font-medium text-muted2 border border-border rounded-md py-1.5 hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ↻ Sync Now
+          </button>
+        )}
       </div>
     </aside>
   )

@@ -355,3 +355,30 @@ def test_jira_pat_test_connection():
         assert result['success'] is True
         assert len(result['boards']) == 2
         assert result['boards'][0]['id'] == 'PROJ1'
+
+
+def test_jira_429_rate_limit_returns_helpful_message():
+    """Jira 429 rate limit error should return helpful message about request delay."""
+    from connectors.jira import JiraConnector
+    
+    connector = JiraConnector({
+        'url': 'https://jira.example.com',
+        'email': 'user@example.com',
+        'api_token': 'token',
+        'project_key': 'TEST'
+    }, [])
+    
+    with patch('jira.JIRA') as mock_jira:
+        # Simulate 429 rate limit error from Jira
+        mock_jira.side_effect = JIRAError(
+            status_code=429,
+            text='Rate limit exceeded'
+        )
+        
+        result = connector.test_connection()
+        
+        assert result['success'] is False
+        assert 'rate limit' in result['message'].lower()
+        assert 'automatically retry' in result['message'].lower()
+        assert 'request delay' in result['message'].lower()
+        assert 'increase' in result['message'].lower()

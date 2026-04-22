@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict, Literal
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 import pandas as pd
 import numpy as np
+import io
+import csv
 from database import get_db
 from models.project import Project
 from models.sync_job import CachedItem
@@ -18,6 +21,7 @@ from calculator.flow import (
     flow_efficiency as calc_flow_efficiency,
     net_flow as calc_net_flow,
     quality_rate as calc_quality_rate,
+    trim_leading_empty_buckets,
 )
 
 router = APIRouter()
@@ -127,6 +131,7 @@ def get_throughput(
         return {"data": [], "avg": 0, "trend_pct": 0}
 
     tp_df = calc_throughput(df, done_col=done_col, weeks=weeks, granularity=granularity)
+    tp_df = trim_leading_empty_buckets(tp_df)
     if tp_df.empty:
         return {"data": [], "avg": 0, "trend_pct": 0}
 
@@ -207,6 +212,7 @@ def get_cycle_time_interval(
         return {"data": []}
 
     ct_df = calc_cycle_time_by_interval(df, done_col=done_col, weeks=weeks, granularity=granularity)
+    ct_df = trim_leading_empty_buckets(ct_df)
     if ct_df.empty:
         return {"data": []}
 
@@ -430,6 +436,7 @@ def get_net_flow(
     done_col  = next((s.display_name for s in reversed(steps) if s.stage == "done"), steps[-1].display_name)
 
     result_df = calc_net_flow(df, start_col, done_col, weeks, granularity=granularity)
+    result_df = trim_leading_empty_buckets(result_df)
     if result_df.empty:
         return {"data": []}
 
@@ -463,6 +470,7 @@ def get_quality_rate(
     done_col = done_steps[-1].display_name if done_steps else steps[-1].display_name
 
     result_df = calc_quality_rate(df, done_col, weeks, granularity=granularity)
+    result_df = trim_leading_empty_buckets(result_df)
     if result_df.empty:
         return {"data": []}
 
@@ -586,6 +594,10 @@ def get_raw_data(
     if df.empty:
         return {"data": [], "columns": []}
 
+    # Build a lookup of status_transitions by item_key
+    items = db.query(CachedItem).filter(CachedItem.project_id == project_id).all()
+    transitions_by_key: dict = {i.item_key: i.status_transitions for i in items}
+
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
     step_cols = [s.display_name for s in steps if s.display_name in df.columns]
 
@@ -603,9 +615,93 @@ def get_raw_data(
                 rec[col] = val.strftime("%Y-%m-%d")
             else:
                 rec[col] = val
+        item_key = rec.get("item_key", "")
+        rec["status_transitions"] = transitions_by_key.get(item_key) or []
         result.append(rec)
 
     return {"data": result, "columns": display_cols}
+
+@router.get("/{project_id}/export-csv")
+def export_csv(
+    project_id: int,
+    weeks: int = Query(52),
+    item_type: str = Query("all"),
+    db: Session = Depends(get_db)
+):
+    """Export raw data as CSV file."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    df = get_items_df(project_id, weeks, item_type, db)
+    if df.empty:
+        # Return empty CSV with headers
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([])
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=export.csv"}
+        )
+
+    steps = sorted(project.workflow_steps, key=lambda s: s.position)
+    step_cols = [s.display_name for s in steps if s.display_name in df.columns]
+
+    base_cols = ["item_key", "item_type", "creator", "created_at", "cycle_time_days", "lead_time_days"]
+    display_cols = [c for c in base_cols if c in df.columns] + step_cols
+
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=display_cols)
+    writer.writeheader()
+    
+    for _, row in df[display_cols].iterrows():
+        rec = {}
+        for col in display_cols:
+            val = row.get(col)
+            if pd.isna(val) if not isinstance(val, (str, dict, list)) else False:
+                rec[col] = ""
+            elif hasattr(val, 'strftime'):
+                rec[col] = val.strftime("%Y-%m-%d")
+            else:
+                rec[col] = str(val) if val is not None else ""
+        writer.writerow(rec)
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=metrics_export.csv"}
+    )
+
+@router.get("/{project_id}/available-statuses")
+def get_available_statuses(
+    project_id: int,
+    db: Session = Depends(get_db),
+):
+    """Return all distinct raw status names found in stored status_transitions.
+
+    Used to help users build workflow configurations from real Jira status data.
+    Items with NULL status_transitions (pre-feature sync) are skipped.
+    """
+    items = db.query(CachedItem).filter(CachedItem.project_id == project_id).all()
+    if not items:
+        raise HTTPException(status_code=404, detail="Project not found or no data synced")
+
+    statuses: set[str] = set()
+    for item in items:
+        for t in (item.status_transitions or []):
+            ts = t.get("to_status")
+            if ts:
+                statuses.add(ts)
+            fs = t.get("from_status")
+            if fs:
+                statuses.add(fs)
+
+    return {"statuses": sorted(statuses)}
+
 
 @router.post("/monte-carlo")
 def run_monte_carlo(data: MonteCarloRequest, db: Session = Depends(get_db)):

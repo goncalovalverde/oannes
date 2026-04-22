@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useCreateProject, useUpdateProject, useTestConnection, useDiscoverStatuses } from '../../api/hooks/useProjects'
+import { useCsvUploadSync } from '../../api/hooks/useSync'
 import type { Project, ProjectInput } from '../../types'
 import AlertBanner from '../ui/AlertBanner'
 import clsx from 'clsx'
+import client from '../../api/client'
 
 const PLATFORMS = [
   { id: 'jira',        label: 'Jira',         icon: '🔵', desc: 'Jira Cloud or Server' },
@@ -23,6 +25,7 @@ const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?:
     { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', help: 'Create at: your Jira instance → Profile → Personal Access Tokens', conditional: (cfg) => cfg.auth_type === 'personal_access_token' },
     { key: 'jira_api_version', label: 'Jira API Version', type: 'select', optional: false, default: 'auto', options: [{ value: 'auto', label: 'Auto-detect (recommended)' }, { value: 'v3', label: 'Force v3 (Cloud)' }, { value: 'v2', label: 'Force v2 (Server/Data Center)' }], help: '⚠️ Most users should use "Auto-detect". Only change if you know your Jira version.' },
     { key: 'jql',       label: 'JQL Filter',  placeholder: 'project = MYPROJ', optional: true },
+    { key: 'request_delay_ms', label: 'Request Delay (ms)', type: 'number', default: '100', optional: true, help: 'Add delay between API requests to avoid rate limiting. Recommended: 100-500ms for large projects.' },
   ],
   trello: [
     { key: 'api_key', label: 'API Key',  help: 'Get at: trello.com/app-key' },
@@ -36,9 +39,7 @@ const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?:
     { key: 'url',          label: 'GitLab URL',    placeholder: 'https://gitlab.com' },
     { key: 'access_token', label: 'Access Token',  type: 'password', help: 'Create at: GitLab → Profile → Access Tokens (api scope)' },
   ],
-  csv: [
-    { key: 'file_path', label: 'File Path', placeholder: '/path/to/data.csv', help: 'Required columns: item_key, item_type, created_at + workflow step date columns' },
-  ],
+  csv: [],  // handled by the custom file picker below
 }
 
 const STAGES = ['queue', 'start', 'in_flight', 'done'] as const
@@ -83,6 +84,9 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [draggedStatus, setDraggedStatus] = useState<string | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [csvValidating, setCsvValidating] = useState(false)
+  const csvFileRef = useRef<HTMLInputElement>(null)
 
   // Set default auth_type and api_version for Jira when platform is selected
   useEffect(() => {
@@ -95,6 +99,33 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
       }
     }
   }, [platform])
+
+  const handleCsvFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setCsvFile(file)
+    setCsvValidating(true)
+    setTestResult(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await client.post('/connectors/csv/upload-preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const data = res.data
+      setTestResult({ success: true, message: `File validated: ${data.columns?.length ?? '?'} columns found` })
+      if (data.extra_columns?.length) {
+        setStatuses(data.extra_columns)
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'File validation failed'
+      setTestResult({ success: false, message: msg })
+      setCsvFile(null)
+    } finally {
+      setCsvValidating(false)
+      e.target.value = ''
+    }
+  }
 
   // Validate required fields
   const getValidationErrors = (): string[] => {
@@ -127,6 +158,7 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const { mutate: discoverStatuses } = useDiscoverStatuses()
   const { mutate: createProject, isPending: isCreating } = useCreateProject()
   const { mutate: updateProject, isPending: isUpdating } = useUpdateProject()
+  const { mutate: csvUpload, isPending: isCsvUploading } = useCsvUploadSync()
 
   const handleTest = () => {
     const errors = getValidationErrors()
@@ -169,7 +201,15 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
     if (existing) {
       updateProject({ id: existing.id, data: projectData }, { onSuccess: () => onSaved(existing.id) })
     } else {
-      createProject(projectData, { onSuccess: (p) => onSaved(p.id) })
+      createProject(projectData, {
+        onSuccess: (p) => {
+          if (platform === 'csv' && csvFile) {
+            csvUpload({ projectId: p.id, file: csvFile }, { onSuccess: () => onSaved(p.id), onError: () => onSaved(p.id) })
+          } else {
+            onSaved(p.id)
+          }
+        },
+      })
     }
   }
 
@@ -276,6 +316,29 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
                 )
               })}
 
+              {/* CSV file picker */}
+              {platform === 'csv' && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted uppercase tracking-widest mb-1">Data File</label>
+                  <input ref={csvFileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleCsvFileChange} />
+                  <button
+                    type="button"
+                    onClick={() => csvFileRef.current?.click()}
+                    disabled={csvValidating}
+                    className="w-full border-2 border-dashed border-border rounded-xl p-4 text-center hover:border-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {csvValidating ? (
+                      <span className="text-sm text-muted">Validating file…</span>
+                    ) : csvFile ? (
+                      <span className="text-sm text-primary font-medium">📄 {csvFile.name} — click to replace</span>
+                    ) : (
+                      <span className="text-sm text-muted">📂 Click to select a CSV or Excel file</span>
+                    )}
+                  </button>
+                  <div className="text-[10px] text-muted mt-1">💡 Required columns: item_key, item_type, created_at + workflow step date columns</div>
+                </div>
+              )}
+
               {validationErrors.length > 0 && (
                 <AlertBanner type="error">
                   <div className="space-y-1">
@@ -289,7 +352,10 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
               <button
                 onClick={handleTest}
                 disabled={isTesting}
-                className="w-full border border-border text-sm font-medium text-muted2 hover:border-primary hover:text-primary rounded-lg py-2 transition-colors disabled:opacity-50"
+                className={clsx(
+                  'w-full border border-border text-sm font-medium text-muted2 hover:border-primary hover:text-primary rounded-lg py-2 transition-colors disabled:opacity-50',
+                  platform === 'csv' && 'hidden'
+                )}
               >
                 {isTesting ? 'Testing connection…' : '🔌 Test Connection'}
               </button>
@@ -334,15 +400,22 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
                 </div>
               )}
 
-              <div className="flex justify-between pt-2">
+              <div className="flex justify-between pt-2 items-center">
                 <button onClick={() => setStep(1)} className="text-sm text-muted2 hover:text-text px-3 py-2">← Back</button>
-                <button
-                  disabled={!name || !testResult?.success}
-                  onClick={() => { setStep(3); handleDiscover() }}
-                  className="bg-primary disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-5 py-2"
-                >
-                  Next →
-                </button>
+                <div className="flex items-center gap-3">
+                  {(!name || !testResult?.success) && (
+                    <span className="text-[11px] text-muted">
+                      {!name ? '⚠️ Enter a project name' : platform === 'csv' ? '⚠️ Select and validate a file' : '⚠️ Test connection first'}
+                    </span>
+                  )}
+                  <button
+                    disabled={!name || !testResult?.success}
+                    onClick={() => { setStep(3); handleDiscover() }}
+                    className="bg-primary disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-5 py-2"
+                  >
+                    Next →
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -463,11 +536,11 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
               <div className="flex justify-between pt-2">
                 <button onClick={() => setStep(2)} className="text-sm text-muted2 hover:text-text px-3 py-2">← Back</button>
                 <button
-                  disabled={isCreating || isUpdating}
+                  disabled={isCreating || isUpdating || isCsvUploading}
                   onClick={handleSave}
                   className="bg-primary disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-5 py-2"
                 >
-                  {isCreating || isUpdating ? 'Saving…' : '✓ Save & Start Sync'}
+                  {isCsvUploading ? '⏳ Importing data…' : isCreating || isUpdating ? 'Saving…' : platform === 'csv' ? '✓ Save & Import' : '✓ Save & Start Sync'}
                 </button>
               </div>
             </>

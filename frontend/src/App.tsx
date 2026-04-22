@@ -10,25 +10,30 @@ import AgingWIP from './pages/AgingWIP'
 import MonteCarlo from './pages/MonteCarlo'
 import RawData from './pages/RawData'
 import Projects from './pages/Projects'
+import { ToastProvider } from './context/ToastContext'
+import { ToastContainer } from './components/ui/ToastContainer'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route path="/"            element={<Dashboard />} />
-          <Route path="/throughput"  element={<Throughput />} />
-          <Route path="/cycle-time"  element={<CycleTime />} />
-          <Route path="/lead-time"   element={<LeadTime />} />
-          <Route path="/wip"         element={<WIP />} />
-          <Route path="/cfd"         element={<CFD />} />
-          <Route path="/aging-wip"   element={<AgingWIP />} />
-          <Route path="/monte-carlo" element={<MonteCarlo />} />
-          <Route path="/raw-data"    element={<RawData />} />
-          <Route path="/projects"    element={<Projects />} />
-          <Route path="*"            element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/"            element={<Dashboard />} />
+            <Route path="/throughput"  element={<Throughput />} />
+            <Route path="/cycle-time"  element={<CycleTime />} />
+            <Route path="/lead-time"   element={<LeadTime />} />
+            <Route path="/wip"         element={<WIP />} />
+            <Route path="/cfd"         element={<CFD />} />
+            <Route path="/aging-wip"   element={<AgingWIP />} />
+            <Route path="/monte-carlo" element={<MonteCarlo />} />
+            <Route path="/raw-data"    element={<RawData />} />
+            <Route path="/projects"    element={<Projects />} />
+            <Route path="*"            element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      <ToastContainer />
+    </ToastProvider>
   )
 }

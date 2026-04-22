@@ -83,6 +83,7 @@ class AzureDevOpsConnector(BaseConnector):
                     "creator": fields.get("System.CreatedBy", {}).get("displayName") if isinstance(fields.get("System.CreatedBy"), dict) else str(fields.get("System.CreatedBy", "")),
                     "created_at": pd.to_datetime(fields.get("System.CreatedDate")),
                     "workflow_timestamps": {k: v.isoformat() if v else None for k, v in timestamps.items()},
+                    "status_transitions": [],
                 }
                 record.update(self._calc_times(timestamps))
                 records.append(record)

@@ -16,7 +16,6 @@ def _create_project(db) -> Project:
         name="Test",
         platform="csv",
         config={"file_path": "/tmp/nonexistent.csv"},
-        sync_frequency="manual",
     )
     db.add(project)
     db.commit()

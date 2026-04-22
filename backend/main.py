@@ -21,12 +21,13 @@ logger.info("🚀 Oannes Backend Starting (DEBUG mode enabled)")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── startup ──────────────────────────────────────────────────────────────
-    from database import init_db, check_database_integrity
+    from database import init_db, check_database_integrity, recover_stuck_sync_jobs
     init_db()
     logger.info("Database initialized")
     
     try:
         check_database_integrity()
+        recover_stuck_sync_jobs()
     except RuntimeError as e:
         logger.error(f"Startup failed: {e}")
         raise
@@ -38,6 +39,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Oannes", version="2.0.0", lifespan=lifespan)
+
+# Register error handlers for consistent error responses
+from api.errors import register_error_handlers
+register_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,7 +56,9 @@ from api.projects import router as projects_router
 from api.metrics import router as metrics_router
 from api.connectors import router as connectors_router
 from api.sync import router as sync_router
+from api.health import router as health_router
 
+app.include_router(health_router, prefix="/health", tags=["health"])
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(metrics_router, prefix="/api/metrics", tags=["metrics"])
 app.include_router(connectors_router, prefix="/api/connectors", tags=["connectors"])

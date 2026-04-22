@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, JSON, ForeignKey, Float, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from database import Base
@@ -14,6 +14,11 @@ class Project(Base):
     config = Column(EncryptedJSON)
     last_synced_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_now)
+    # Rate limiting configuration for API requests (mainly Jira)
+    # rate_limit_enabled: whether to respect rate limit headers and retry
+    # rate_limit_retry_delay: seconds to wait after rate limit response (overrides API suggestion)
+    rate_limit_enabled = Column(Boolean, default=True)
+    rate_limit_retry_delay = Column(Float, nullable=True)  # None = use API-provided delay
     workflow_steps = relationship("WorkflowStep", back_populates="project", order_by="WorkflowStep.position", cascade="all, delete-orphan")
     sync_jobs = relationship("SyncJob", back_populates="project", cascade="all, delete-orphan")
 

@@ -75,6 +75,7 @@ class GitLabConnector(BaseConnector):
                 "creator": issue.author.get("name") if issue.author else None,
                 "created_at": pd.to_datetime(issue.created_at),
                 "workflow_timestamps": {k: v.isoformat() if v else None for k, v in timestamps.items()},
+                "status_transitions": [],
             }
             
             start_steps = [s for s in self.workflow_steps if s["stage"] == "start"]
