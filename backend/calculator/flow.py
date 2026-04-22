@@ -133,25 +133,32 @@ def compute_workflow_timestamps_from_transitions(
         - Records the FIRST time an issue reached each workflow step.
         - If an issue is reopened (Done → In Progress → Done again), the first Done
           timestamp is preserved.
+        - Status matching is case-insensitive.
     """
     if not transitions or not workflow_steps:
         return {}
 
-    # Build a map: source_status → display_name
+    # Build a map: lowercase source_status → display_name
+    # (case-insensitive matching like Jira connector does)
     status_to_step = {}
     for step in workflow_steps:
         for source_status in step.get("source_statuses", []):
-            status_to_step[source_status] = step["display_name"]
+            status_to_step[source_status.lower()] = step["display_name"]
 
     # Track first arrival at each step
     step_arrivals = {}
 
     for trans in transitions:
         to_status = trans.get("to_status")
-        if not to_status or to_status not in status_to_step:
+        if not to_status:
+            continue
+        
+        # Case-insensitive lookup
+        to_status_lower = to_status.lower()
+        if to_status_lower not in status_to_step:
             continue
 
-        step_name = status_to_step[to_status]
+        step_name = status_to_step[to_status_lower]
         if step_name not in step_arrivals:
             # First time reaching this step
             step_arrivals[step_name] = trans.get("transitioned_at")
@@ -161,6 +168,71 @@ def compute_workflow_timestamps_from_transitions(
     for step in workflow_steps:
         display_name = step["display_name"]
         result[display_name] = step_arrivals.get(display_name)
+
+    return result
+
+
+def cycle_time_between_statuses(items: list, from_status: str, to_status: str) -> list:
+    """Calculate cycle time between two specific statuses.
+
+    Arguments:
+        items: list of items, each with "item_key" and "status_transitions"
+        from_status: source status name (e.g., "In Progress")
+        to_status: target status name (e.g., "Done")
+
+    Returns:
+        list of dicts with "item_key" and "cycle_time_days" (None if transition not reached)
+
+    Semantics:
+        - For each item, finds the FIRST transition to from_status
+        - Then finds the FIRST transition to to_status AFTER that
+        - Calculates days between those two transitions
+        - If either status is never reached, cycle_time_days is None
+        - If from_status is reached but to_status never after, cycle_time_days is None
+    """
+    result = []
+
+    for item in items:
+        item_key = item.get("item_key")
+        transitions = item.get("status_transitions")
+
+        # Handle items with no transitions
+        if not transitions:
+            result.append({"item_key": item_key, "cycle_time_days": None})
+            continue
+
+        # Find first transition INTO from_status
+        from_time = None
+        for trans in transitions:
+            if trans.get("to_status") == from_status:
+                from_time = trans.get("transitioned_at")
+                break
+
+        if from_time is None:
+            # Never reached from_status
+            result.append({"item_key": item_key, "cycle_time_days": None})
+            continue
+
+        # Find first transition to to_status AFTER from_time
+        to_time = None
+        from_dt = pd.to_datetime(from_time)
+        for trans in transitions:
+            if trans.get("to_status") == to_status:
+                trans_dt = pd.to_datetime(trans.get("transitioned_at"))
+                if trans_dt > from_dt:
+                    to_time = trans.get("transitioned_at")
+                    break
+
+        if to_time is None:
+            # Never reached to_status after from_status
+            result.append({"item_key": item_key, "cycle_time_days": None})
+            continue
+
+        # Calculate cycle time in days
+        from_dt = pd.to_datetime(from_time)
+        to_dt = pd.to_datetime(to_time)
+        cycle_days = (to_dt - from_dt).days
+        result.append({"item_key": item_key, "cycle_time_days": float(cycle_days)})
 
     return result
 

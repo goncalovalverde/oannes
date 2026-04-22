@@ -96,16 +96,27 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
         for step in data.workflow_steps:
             ws = WorkflowStep(project_id=project.id, **step.model_dump())
             db.add(ws)
-    db.commit()
-    db.refresh(project)
-    if workflow_changed:
-        try:
+    
+    try:
+        # Flush workflow changes to the database first
+        db.flush()
+        
+        # Atomically recompute timestamps before commit
+        # If recompute fails, the entire transaction (including workflow update) will rollback
+        if workflow_changed:
             SyncService(db).recompute_workflow_timestamps(project_id)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).warning(
-                "recompute_workflow_timestamps failed for project %s", project_id, exc_info=True
-            )
+        
+        # Commit all changes (workflow + recomputed metrics) together
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to update project %s: %s", project_id, str(e), exc_info=True
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to update project: {str(e)}")
+    
+    db.refresh(project)
     return project
 
 @router.delete("/{project_id}")
