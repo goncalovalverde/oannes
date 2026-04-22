@@ -67,7 +67,7 @@ export function useCfd(projectId: number | null, weeks: number = 12) {
 }
 
 export function useAgingWip(projectId: number | null) {
-  return useQuery<AgingItem[]>({
+  return useQuery<MetricResponse>({
     queryKey: ['metrics', projectId, 'aging-wip'],
     queryFn: () => client.get(`/metrics/${projectId}/aging-wip`).then(r => r.data.data),
     enabled: projectId != null,

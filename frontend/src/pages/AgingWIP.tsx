@@ -8,10 +8,25 @@ import clsx from 'clsx'
 
 export default function AgingWIP() {
   const { activeProjectId, weeks, itemType } = useFilterStore()
-  const { data = [], isLoading } = useAgingWip(activeProjectId)
+  const { data: response, isLoading } = useAgingWip(activeProjectId)
   const { data: summary } = useMetricsSummary(activeProjectId, weeks, itemType)
 
   if (!activeProjectId) return <EmptyState icon="⧗" title="No project selected" description="Select a project from the sidebar." />
+
+  // response is MetricResponse { data: [...MetricDataPoint], stats: {...} }
+  const rawData = response?.data ?? []
+  
+  // Transform API data to AgingItem format
+  // API returns: { date, value (age_days), by_type: { item_key, item_type, stage, is_over_85th } }
+  // Page expects: { item_key, item_type, stage, age_days, is_over_85th, started_at }
+  const data = rawData.map((item: any) => ({
+    item_key: item.by_type?.item_key || '',
+    item_type: item.by_type?.item_type || 'Unknown',
+    stage: item.by_type?.stage || 'Unknown',
+    age_days: item.value,
+    is_over_85th: item.by_type?.is_over_85th || false,
+    started_at: null,
+  }))
 
   const atRiskCount = data.filter(d => d.is_over_85th).length
 
