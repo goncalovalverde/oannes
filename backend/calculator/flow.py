@@ -319,15 +319,16 @@ def cycle_time_by_interval(df: pd.DataFrame, done_col: str, weeks: int = 12, gra
 def cycle_time_stats(df: pd.DataFrame) -> dict:
     """Percentile statistics for cycle time."""
     if df.empty or "cycle_time_days" not in df.columns:
-        return {"p50": None, "p85": None, "p95": None, "mean": None, "std": None, "count": 0}
+        return {"p50": None, "p75": None, "p85": None, "p95": None, "mean": None, "std": None, "count": 0}
 
     clean = df["cycle_time_days"].dropna()
     clean = clean[clean > 0]
     if clean.empty:
-        return {"p50": None, "p85": None, "p95": None, "mean": None, "std": None, "count": 0}
+        return {"p50": None, "p75": None, "p85": None, "p95": None, "mean": None, "std": None, "count": 0}
 
     return {
         "p50":   float(np.percentile(clean, 50)),
+        "p75":   float(np.percentile(clean, 75)),
         "p85":   float(np.percentile(clean, 85)),
         "p95":   float(np.percentile(clean, 95)),
         "mean":  float(clean.mean()),
@@ -339,15 +340,16 @@ def cycle_time_stats(df: pd.DataFrame) -> dict:
 def lead_time_stats(df: pd.DataFrame) -> dict:
     """Percentile statistics for lead time."""
     if df.empty or "lead_time_days" not in df.columns:
-        return {"p50": None, "p85": None, "p95": None, "mean": None, "std": None, "count": 0}
+        return {"p50": None, "p75": None, "p85": None, "p95": None, "mean": None, "std": None, "count": 0}
 
     clean = df["lead_time_days"].dropna()
     clean = clean[clean > 0]
     if clean.empty:
-        return {"p50": None, "p85": None, "p95": None, "mean": None, "std": None, "count": 0}
+        return {"p50": None, "p75": None, "p85": None, "p95": None, "mean": None, "std": None, "count": 0}
 
     return {
         "p50":   float(np.percentile(clean, 50)),
+        "p75":   float(np.percentile(clean, 75)),
         "p85":   float(np.percentile(clean, 85)),
         "p95":   float(np.percentile(clean, 95)),
         "mean":  float(clean.mean()),
