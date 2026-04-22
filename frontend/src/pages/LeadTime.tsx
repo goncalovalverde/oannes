@@ -11,16 +11,16 @@ export default function LeadTime() {
 
   if (!activeProjectId) return <EmptyState icon="⤳" title="No project selected" description="Select a project from the sidebar." />
 
-  const pcts = data?.percentiles
+  const stats = data?.stats
   const scatter = data?.data ?? []
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: '50th Percentile', value: pcts?.p50 != null ? `${pcts.p50.toFixed(1)}d` : '—', color: '#22c55e' },
-          { label: '85th Percentile', value: pcts?.p85 != null ? `${pcts.p85.toFixed(1)}d` : '—', color: '#f59e0b' },
-          { label: '95th Percentile', value: pcts?.p95 != null ? `${pcts.p95.toFixed(1)}d` : '—', color: '#ef4444' },
+          { label: '50th Percentile', value: stats?.p50 != null ? `${stats.p50.toFixed(1)}d` : '—', color: '#22c55e' },
+          { label: '85th Percentile', value: stats?.p85 != null ? `${stats.p85.toFixed(1)}d` : '—', color: '#f59e0b' },
+          { label: '95th Percentile', value: stats?.p95 != null ? `${stats.p95.toFixed(1)}d` : '—', color: '#ef4444' },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-surface border border-border rounded-xl p-4 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl" style={{ background: color }} />
@@ -34,14 +34,14 @@ export default function LeadTime() {
         <div className="text-sm font-bold mb-1">Lead Time Scatterplot</div>
         <div className="text-xs text-muted mb-4">Days from item creation to done — includes wait time before work starts</div>
         {isLoading ? <ChartSkeleton /> : (
-          <TimeScatterChart data={scatter} p50={pcts?.p50} p85={pcts?.p85} p95={pcts?.p95} yField="lead_time_days" yLabel="Lead Time" />
+          <TimeScatterChart data={scatter} p50={stats?.p50} p85={stats?.p85} p95={stats?.p95} yField="lead_time_days" yLabel="Lead Time" />
         )}
       </div>
 
       <div className="bg-surface border border-border rounded-xl p-5">
         <div className="text-sm font-bold mb-1">Distribution</div>
         {isLoading ? <ChartSkeleton /> : (
-          <TimeHistogram data={scatter} field="lead_time_days" p50={pcts?.p50} p85={pcts?.p85} p95={pcts?.p95} />
+          <TimeHistogram data={scatter} field="lead_time_days" p50={stats?.p50} p85={stats?.p85} p95={stats?.p95} />
         )}
       </div>
 

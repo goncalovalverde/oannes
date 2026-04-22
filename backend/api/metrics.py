@@ -197,7 +197,7 @@ def get_throughput(
         )
     )
 
-@router.get("/{project_id}/cycle-time")
+@router.get("/{project_id}/cycle-time", response_model=ResponseEnvelope[MetricResponse])
 def get_cycle_time(
     project_id: int,
     weeks: int = Query(12),
@@ -210,7 +210,15 @@ def get_cycle_time(
 
     df = get_items_df(project_id, weeks, item_type, db)
     if df.empty or "cycle_time_days" not in df.columns:
-        return {"data": [], "percentiles": {"p50": None, "p85": None, "p95": None}}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0, p50=None, p85=None, p95=None),
+                unit="days",
+                period="total"
+            )
+        )
 
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
     done_steps = [s for s in steps if s.stage == "done"]
@@ -220,18 +228,29 @@ def get_cycle_time(
     data = []
     for _, row in valid.iterrows():
         completed_at = row.get(done_col, row.get("created_at", None)) if done_col else row.get("created_at", None)
-        data.append({
-            "item_key": str(row["item_key"]),
-            "item_type": str(row["item_type"]),
-            "completed_at": completed_at.strftime("%Y-%m-%d") if pd.notna(completed_at) and completed_at is not None else "",
-            "cycle_time_days": float(row["cycle_time_days"])
-        })
+        data.append(MetricDataPoint(
+            date=completed_at.strftime("%Y-%m-%d") if pd.notna(completed_at) and completed_at is not None else "",
+            value=float(row["cycle_time_days"]),
+            by_type={"item_key": str(row["item_key"]), "item_type": str(row["item_type"])}
+        ))
 
     stats = cycle_time_stats(df)
-    pct = {"p50": stats["p50"], "p85": stats["p85"], "p95": stats["p95"]}
-    return {"data": data, "percentiles": pct}
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=data,
+            stats=MetricStats(
+                avg=stats.get("p50", 0) or 0,
+                p50=stats.get("p50"),
+                p85=stats.get("p85"),
+                p95=stats.get("p95")
+            ),
+            unit="days",
+            period="total"
+        )
+    )
 
-@router.get("/{project_id}/cycle-time-interval")
+@router.get("/{project_id}/cycle-time-interval", response_model=ResponseEnvelope[MetricResponse])
 def get_cycle_time_interval(
     project_id: int,
     weeks: int = Query(12),
@@ -245,34 +264,77 @@ def get_cycle_time_interval(
 
     df = get_items_df(project_id, weeks, item_type, db)
     if df.empty or "cycle_time_days" not in df.columns:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="days",
+                period=granularity
+            )
+        )
 
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
     done_steps = [s for s in steps if s.stage == "done"]
     if not done_steps:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="days",
+                period=granularity
+            )
+        )
 
     done_col = done_steps[-1].display_name
     if done_col not in df.columns:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="days",
+                period=granularity
+            )
+        )
 
     ct_df = calc_cycle_time_by_interval(df, done_col=done_col, weeks=weeks, granularity=granularity)
     ct_df = trim_leading_empty_buckets(ct_df)
     if ct_df.empty:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="days",
+                period=granularity
+            )
+        )
 
     result = []
+    values = []
     for idx, row in ct_df.iterrows():
         avg_ct = row.get("avg_cycle_time")
         if pd.notna(avg_ct):
-            result.append({
-                "period": idx.strftime("%Y-%m-%d"),
-                "avg_cycle_time": float(round(avg_ct, 2))
-            })
+            result.append(MetricDataPoint(
+                date=idx.strftime("%Y-%m-%d"),
+                value=float(round(avg_ct, 2))
+            ))
+            values.append(float(round(avg_ct, 2)))
 
-    return {"data": result}
+    avg_value = float(np.mean(values)) if values else 0
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=result,
+            stats=MetricStats(avg=round(avg_value, 2)),
+            unit="days",
+            period=granularity
+        )
+    )
 
-@router.get("/{project_id}/lead-time")
+@router.get("/{project_id}/lead-time", response_model=ResponseEnvelope[MetricResponse])
 def get_lead_time(
     project_id: int,
     weeks: int = Query(12),
@@ -285,7 +347,15 @@ def get_lead_time(
 
     df = get_items_df(project_id, weeks, item_type, db)
     if df.empty or "lead_time_days" not in df.columns:
-        return {"data": [], "percentiles": {"p50": None, "p85": None, "p95": None}}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0, p50=None, p85=None, p95=None),
+                unit="days",
+                period="total"
+            )
+        )
 
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
     done_steps = [s for s in steps if s.stage == "done"]
@@ -295,18 +365,29 @@ def get_lead_time(
     data = []
     for _, row in valid.iterrows():
         completed_at = row.get(done_col, row.get("created_at", None)) if done_col else row.get("created_at", None)
-        data.append({
-            "item_key": str(row["item_key"]),
-            "item_type": str(row["item_type"]),
-            "completed_at": completed_at.strftime("%Y-%m-%d") if pd.notna(completed_at) and completed_at is not None else "",
-            "lead_time_days": float(row["lead_time_days"])
-        })
+        data.append(MetricDataPoint(
+            date=completed_at.strftime("%Y-%m-%d") if pd.notna(completed_at) and completed_at is not None else "",
+            value=float(row["lead_time_days"]),
+            by_type={"item_key": str(row["item_key"]), "item_type": str(row["item_type"])}
+        ))
 
     stats = lead_time_stats(df)
-    pct = {"p50": stats["p50"], "p85": stats["p85"], "p95": stats["p95"]}
-    return {"data": data, "percentiles": pct}
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=data,
+            stats=MetricStats(
+                avg=stats.get("p50", 0) or 0,
+                p50=stats.get("p50"),
+                p85=stats.get("p85"),
+                p95=stats.get("p95")
+            ),
+            unit="days",
+            period="total"
+        )
+    )
 
-@router.get("/{project_id}/wip")
+@router.get("/{project_id}/wip", response_model=ResponseEnvelope[MetricResponse])
 def get_wip(
     project_id: int,
     weeks: int = Query(12),
@@ -321,13 +402,25 @@ def get_wip(
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
 
     if df.empty or not steps:
-        return {"data": [], "current_wip": 0}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period="daily"
+            )
+        )
 
     steps_list = [{"display_name": s.display_name, "stage": s.stage, "position": s.position, "source_statuses": s.source_statuses or []} for s in steps]
     wip_df = wip_over_time(df, steps_list, weeks=weeks)
     result = []
     for _, row in wip_df.iterrows():
-        result.append({"date": row["date"].strftime("%Y-%m-%d") if hasattr(row["date"], "strftime") else str(row["date"]), "stage": row["stage"], "count": int(row["count"])})
+        result.append(MetricDataPoint(
+            date=row["date"].strftime("%Y-%m-%d") if hasattr(row["date"], "strftime") else str(row["date"]),
+            value=int(row["count"]),
+            by_type={"stage": row["stage"]}
+        ))
 
     current_wip = 0
     in_flight_steps = [s for s in steps if s.stage == "in_flight"]
@@ -340,9 +433,17 @@ def get_wip(
             not_done = started[started[done_col].isna()]
             current_wip = len(not_done)
 
-    return {"data": result, "current_wip": current_wip}
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=result,
+            stats=MetricStats(avg=float(current_wip)),
+            unit="items",
+            period="daily"
+        )
+    )
 
-@router.get("/{project_id}/cfd")
+@router.get("/{project_id}/cfd", response_model=ResponseEnvelope[MetricResponse])
 def get_cfd(
     project_id: int,
     weeks: int = Query(12),
@@ -357,11 +458,27 @@ def get_cfd(
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
 
     if df.empty or not steps:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period="daily"
+            )
+        )
 
     stage_names = [s.display_name for s in steps if s.display_name in df.columns]
     if not stage_names:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period="daily"
+            )
+        )
 
     steps_list = [{"display_name": s.display_name, "stage": s.stage, "position": s.position, "source_statuses": s.source_statuses or []} for s in steps]
     cfd_df = calc_cfd(df, steps_list)
@@ -371,11 +488,23 @@ def get_cfd(
         date_str = idx.strftime("%Y-%m-%d")
         for stage in stage_names:
             count = int(row.get(stage, 0))
-            result.append({"date": date_str, "stage": stage, "count": count})
+            result.append(MetricDataPoint(
+                date=date_str,
+                value=float(count),
+                by_type={"stage": stage}
+            ))
 
-    return {"data": result}
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=result,
+            stats=MetricStats(avg=0),
+            unit="items",
+            period="daily"
+        )
+    )
 
-@router.get("/{project_id}/aging-wip")
+@router.get("/{project_id}/aging-wip", response_model=ResponseEnvelope[MetricResponse])
 def get_aging_wip(
     project_id: int,
     weeks: int = Query(12),
@@ -390,13 +519,29 @@ def get_aging_wip(
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
 
     if df.empty or not steps:
-        return {"data": [], "p85_benchmark": None}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="days",
+                period="total"
+            )
+        )
 
     in_flight_steps = [s for s in steps if s.stage == "in_flight"]
     done_steps = [s for s in steps if s.stage == "done"]
 
     if not in_flight_steps or not done_steps:
-        return {"data": [], "p85_benchmark": None}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="days",
+                period="total"
+            )
+        )
 
     start_step = in_flight_steps[0]
     done_col = done_steps[-1].display_name
@@ -406,7 +551,15 @@ def get_aging_wip(
 
     start_col = start_step.display_name
     if start_col not in df.columns:
-        return {"data": [], "p85_benchmark": p85}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=p85 or 0, p85=p85),
+                unit="days",
+                period="total"
+            )
+        )
 
     in_progress = df[df[start_col].notna()]
     if done_col in df.columns:
@@ -414,6 +567,7 @@ def get_aging_wip(
 
     now = pd.Timestamp(_now())
     result = []
+    ages = []
     for _, row in in_progress.iterrows():
         age = (now - row[start_col]).days if pd.notna(row[start_col]) else 0
 
@@ -424,18 +578,31 @@ def get_aging_wip(
                 current_stage = step.display_name
                 break
 
-        result.append({
-            "item_key": str(row["item_key"]),
-            "item_type": str(row["item_type"]),
-            "stage": current_stage,
-            "age_days": float(age),
-            "is_over_85th": (p85 is not None and age > p85)
-        })
+        result.append(MetricDataPoint(
+            date="",
+            value=float(age),
+            by_type={
+                "item_key": str(row["item_key"]),
+                "item_type": str(row["item_type"]),
+                "stage": current_stage,
+                "is_over_85th": p85 is not None and age > p85
+            }
+        ))
+        ages.append(float(age))
 
-    result.sort(key=lambda x: x["age_days"], reverse=True)
-    return {"data": result, "p85_benchmark": p85}
+    result.sort(key=lambda x: x.value, reverse=True)
+    avg_age = float(np.mean(ages)) if ages else 0
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=result,
+            stats=MetricStats(avg=round(avg_age, 1), p85=p85),
+            unit="days",
+            period="total"
+        )
+    )
 
-@router.get("/{project_id}/flow-efficiency")
+@router.get("/{project_id}/flow-efficiency", response_model=ResponseEnvelope[MetricResponse])
 def get_flow_efficiency(
     project_id: int,
     weeks: int = Query(12),
@@ -450,14 +617,30 @@ def get_flow_efficiency(
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
 
     if df.empty or not steps:
-        return {"flow_efficiency": 0.0}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="%",
+                period="total"
+            )
+        )
 
     steps_list = [{"display_name": s.display_name, "stage": s.stage, "position": s.position, "source_statuses": s.source_statuses or []} for s in steps]
     fe = calc_flow_efficiency(df, steps_list)
-    return {"flow_efficiency": fe}
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=[MetricDataPoint(date="", value=float(fe))],
+            stats=MetricStats(avg=float(fe)),
+            unit="%",
+            period="total"
+        )
+    )
 
 
-@router.get("/{project_id}/net-flow")
+@router.get("/{project_id}/net-flow", response_model=ResponseEnvelope[MetricResponse])
 def get_net_flow(
     project_id: int,
     weeks: int = Query(12),
@@ -471,11 +654,27 @@ def get_net_flow(
 
     df = get_items_df(project_id, weeks, item_type, db)
     if df.empty:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period=granularity
+            )
+        )
 
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
     if not steps:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period=granularity
+            )
+        )
 
     start_col = next((s.display_name for s in steps if s.stage in ("start", "in_flight")), steps[0].display_name)
     done_col  = next((s.display_name for s in reversed(steps) if s.stage == "done"), steps[-1].display_name)
@@ -483,11 +682,39 @@ def get_net_flow(
     result_df = calc_net_flow(df, start_col, done_col, weeks, granularity=granularity)
     result_df = trim_leading_empty_buckets(result_df)
     if result_df.empty:
-        return {"data": []}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period=granularity
+            )
+        )
 
     records = result_df.copy()
     records["week"] = records["week"].dt.strftime("%Y-%m-%d")
-    return {"data": records.to_dict(orient="records")}
+    
+    data = []
+    values = []
+    for _, row in records.iterrows():
+        value = float(row.get("net_flow", 0))
+        data.append(MetricDataPoint(
+            date=row["week"],
+            value=value
+        ))
+        values.append(value)
+
+    avg_value = float(np.mean(values)) if values else 0
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=data,
+            stats=MetricStats(avg=round(avg_value, 1)),
+            unit="items",
+            period=granularity
+        )
+    )
 
 
 @router.get("/{project_id}/quality-rate")

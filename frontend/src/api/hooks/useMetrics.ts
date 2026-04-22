@@ -26,7 +26,7 @@ export function useThroughput(projectId: number | null, weeks: number, itemType:
 export function useCycleTime(projectId: number | null, weeks: number, itemType: string) {
   return useQuery({
     queryKey: ['metrics', projectId, 'cycle-time', weeks, itemType],
-    queryFn: () => client.get(`/metrics/${projectId}/cycle-time`, metricsParams(weeks, itemType)).then(r => r.data),
+    queryFn: () => client.get(`/metrics/${projectId}/cycle-time`, metricsParams(weeks, itemType)).then(r => r.data.data),
     enabled: projectId != null,
   })
 }
@@ -45,7 +45,7 @@ export function useCycleTimeInterval(projectId: number | null, weeks: number, it
 export function useLeadTime(projectId: number | null, weeks: number, itemType: string) {
   return useQuery({
     queryKey: ['metrics', projectId, 'lead-time', weeks, itemType],
-    queryFn: () => client.get(`/metrics/${projectId}/lead-time`, metricsParams(weeks, itemType)).then(r => r.data),
+    queryFn: () => client.get(`/metrics/${projectId}/lead-time`, metricsParams(weeks, itemType)).then(r => r.data.data),
     enabled: projectId != null,
   })
 }
