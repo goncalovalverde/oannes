@@ -1,10 +1,11 @@
 """Rate limiting utilities for API connectors.
 
-Handles rate limit responses and automatically retries with configurable delays.
+Handles rate limit responses and automatically retries with exponential backoff and jitter.
 """
 
 import time
 import logging
+import random
 from typing import Optional, Callable, TypeVar
 from functools import wraps
 
@@ -17,39 +18,78 @@ class RateLimitExceeded(Exception):
     pass
 
 
-def handle_rate_limit(
-    error_response: dict,
-    retry_delay: Optional[float] = None,
-    max_retries: int = 3
+def calculate_backoff_delay(
+    attempt: int,
+    base_delay: float = 1.0,
+    max_delay: float = 300.0,
+    use_jitter: bool = True
 ) -> float:
-    """Extract and respect rate limit information from API response.
+    """Calculate exponential backoff delay with optional jitter.
+    
+    Implements: delay = min(base_delay * (2 ^ attempt) + jitter, max_delay)
     
     Args:
-        error_response: Response headers or body containing rate limit info
-        retry_delay: User-configured retry delay (overrides API suggestion)
-        max_retries: Maximum number of retries
+        attempt: Retry attempt number (0-indexed)
+        base_delay: Initial delay in seconds (default: 1s)
+        max_delay: Maximum delay cap in seconds (default: 5 minutes)
+        use_jitter: Add random jitter to prevent thundering herd (default: True)
         
     Returns:
         Delay in seconds before retry
         
-    Raises:
-        RateLimitExceeded: If max retries exceeded
+    Example:
+        >>> calculate_backoff_delay(0)  # First retry: ~1s + jitter
+        >>> calculate_backoff_delay(1)  # Second retry: ~2s + jitter
+        >>> calculate_backoff_delay(5)  # Capped at 300s
     """
+    exponential_delay = base_delay * (2 ** attempt)
+    capped_delay = min(exponential_delay, max_delay)
+    
+    if use_jitter:
+        # Add jitter: random value between 0 and capped_delay
+        jitter = random.uniform(0, capped_delay)
+        final_delay = capped_delay + jitter
+    else:
+        final_delay = capped_delay
+    
+    return final_delay
+
+
+def handle_rate_limit(
+    error_response: dict,
+    attempt: int,
+    retry_delay: Optional[float] = None,
+    api_provided_delay: Optional[float] = None,
+) -> float:
+    """Extract and respect rate limit information from API response.
+    
+    Priority:
+    1. User-configured retry_delay (if provided)
+    2. API-provided Retry-After header
+    3. Exponential backoff with jitter
+    
+    Args:
+        error_response: Response headers or body containing rate limit info
+        attempt: Current retry attempt (0-indexed)
+        retry_delay: User-configured retry delay (overrides everything)
+        api_provided_delay: Server-provided retry-after delay
+        
+    Returns:
+        Delay in seconds before retry
+    """
+    # Priority 1: User override
     if retry_delay is not None:
         logger.warning(f"Rate limited. Retrying in {retry_delay}s (user-configured)")
         return retry_delay
     
-    # Extract delay from Jira rate limit header
-    # Example: "Request should be retried after 7 seconds"
-    if isinstance(error_response, dict):
-        if "retry_after" in error_response:
-            delay = float(error_response["retry_after"])
-            logger.warning(f"Rate limited. Retrying in {delay}s (API-provided)")
-            return delay
+    # Priority 2: API-provided delay (Retry-After header)
+    if api_provided_delay is not None:
+        logger.warning(f"Rate limited. Retrying in {api_provided_delay}s (API-provided)")
+        return api_provided_delay
     
-    # Default exponential backoff: 2s, 4s, 8s
-    delay = min(2 ** (max_retries - 1), 30)  # Cap at 30s
-    logger.warning(f"Rate limited. Retrying in {delay}s (exponential backoff)")
+    # Priority 3: Exponential backoff with jitter
+    delay = calculate_backoff_delay(attempt, base_delay=1.0, max_delay=300.0)
+    logger.warning(f"Rate limited. Retrying in {delay:.1f}s (exponential backoff with jitter)")
     return delay
 
 

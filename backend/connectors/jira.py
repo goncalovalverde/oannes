@@ -7,6 +7,7 @@ from datetime import datetime
 from connectors.base import BaseConnector
 from jira import JIRAError
 from requests.exceptions import HTTPError
+from utils.rate_limit import calculate_backoff_delay, handle_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -226,12 +227,14 @@ class JiraConnector(BaseConnector):
             raise
 
     def _retry_with_rate_limit_backoff(self, func, *args, max_retries=3, **kwargs):
-        """Retry a function with automatic backoff for Jira rate limiting (429 errors).
+        """Retry a function with automatic exponential backoff for Jira rate limiting (429 errors).
+        
+        Implements exponential backoff with jitter: delay = min(2^attempt, 300s) + random(0, delay)
         
         Handles HTTP 429 responses by:
-        1. Extracting Retry-After header or default wait time
-        2. Waiting the specified duration
-        3. Retrying the request
+        1. Extracting Retry-After header or using exponential backoff formula
+        2. Waiting the specified duration (with jitter to prevent thundering herd)
+        3. Retrying the request up to max_retries times
         
         Args:
             func: Callable to retry
@@ -253,25 +256,31 @@ class JiraConnector(BaseConnector):
             except JIRAError as e:
                 if e.status_code == 429:
                     if attempt < max_retries:
-                        # Extract retry-after time from error or use default exponential backoff
-                        retry_after = 5 + (2 ** attempt)  # 5, 7, 11, 19 seconds
+                        # Extract Retry-After header from error if present
+                        api_provided_delay = None
                         error_text = str(e)
                         
-                        # Try to extract Retry-After from error message
                         if "after" in error_text.lower():
                             try:
                                 match = re.search(r'after\s+(\d+)\s+seconds', error_text.lower())
                                 if match:
-                                    retry_after = int(match.group(1))
+                                    api_provided_delay = int(match.group(1))
                             except Exception:
                                 pass  # Use default backoff
+                        
+                        # Use handle_rate_limit to get delay with exponential backoff + jitter
+                        retry_delay = handle_rate_limit(
+                            error_response={},
+                            attempt=attempt,
+                            api_provided_delay=api_provided_delay
+                        )
                         
                         logger.warning(
                             f"[Jira Rate Limit] Hit rate limit (429). "
                             f"Attempt {attempt + 1}/{max_retries + 1}. "
-                            f"Waiting {retry_after} seconds before retry..."
+                            f"Waiting {retry_delay:.1f}s before retry..."
                         )
-                        time.sleep(retry_after)
+                        time.sleep(retry_delay)
                         continue
                     else:
                         logger.error(

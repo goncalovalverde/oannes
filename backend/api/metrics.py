@@ -11,6 +11,7 @@ import csv
 from database import get_db
 from models.project import Project
 from models.sync_job import CachedItem
+from models.api_response import ResponseEnvelope, MetricResponse, MetricStats, MetricDataPoint
 from calculator.flow import (
     throughput as calc_throughput,
     cycle_time_by_interval as calc_cycle_time_by_interval,
@@ -105,7 +106,7 @@ def get_item_types(project_id: int, db: Session = Depends(get_db)):
     items = db.query(CachedItem.item_type).filter(CachedItem.project_id == project_id).distinct().all()
     return {"item_types": [i[0] for i in items if i[0]]}
 
-@router.get("/{project_id}/throughput")
+@router.get("/{project_id}/throughput", response_model=ResponseEnvelope[MetricResponse])
 def get_throughput(
     project_id: int,
     weeks: int = Query(12),
@@ -119,29 +120,65 @@ def get_throughput(
 
     df = get_items_df(project_id, weeks, item_type, db)
     if df.empty:
-        return {"data": [], "avg": 0, "trend_pct": 0}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0, trend_pct=0),
+                unit="items",
+                period=granularity
+            )
+        )
 
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
     done_steps = [s for s in steps if s.stage == "done"]
     if not done_steps:
-        return {"data": [], "avg": 0, "trend_pct": 0}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0, trend_pct=0),
+                unit="items",
+                period=granularity
+            )
+        )
 
     done_col = done_steps[-1].display_name
     if done_col not in df.columns:
-        return {"data": [], "avg": 0, "trend_pct": 0}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0, trend_pct=0),
+                unit="items",
+                period=granularity
+            )
+        )
 
     tp_df = calc_throughput(df, done_col=done_col, weeks=weeks, granularity=granularity)
     tp_df = trim_leading_empty_buckets(tp_df)
     if tp_df.empty:
-        return {"data": [], "avg": 0, "trend_pct": 0}
+        return ResponseEnvelope(
+            status="success",
+            data=MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0, trend_pct=0),
+                unit="items",
+                period=granularity
+            )
+        )
 
-    result = []
+    data_points = []
     totals = []
     for idx, row in tp_df.iterrows():
         total = int(row.get("Total", 0))
-        by_type = {col: int(row[col]) for col in tp_df.columns if col != "Total"}
+        by_type = {col: int(row[col]) for col in tp_df.columns if col != "Total"} if "by_type" in tp_df.columns else None
         totals.append(total)
-        result.append({"week": idx.strftime("%Y-%m-%d"), "total": total, "by_type": by_type})
+        data_points.append(MetricDataPoint(
+            date=idx.strftime("%Y-%m-%d"),
+            value=float(total),
+            by_type=by_type
+        ))
 
     avg = float(np.mean(totals)) if totals else 0
     half = len(totals) // 2
@@ -150,7 +187,15 @@ def get_throughput(
     else:
         trend_pct = 0.0
 
-    return {"data": result, "avg": round(avg, 1), "trend_pct": round(trend_pct, 1)}
+    return ResponseEnvelope(
+        status="success",
+        data=MetricResponse(
+            data=data_points,
+            stats=MetricStats(avg=round(avg, 1), trend_pct=round(trend_pct, 1)),
+            unit="items",
+            period=granularity
+        )
+    )
 
 @router.get("/{project_id}/cycle-time")
 def get_cycle_time(
