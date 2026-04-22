@@ -11,7 +11,10 @@ export default function Throughput() {
 
   if (!activeProjectId) return <EmptyState icon="↑" title="No project selected" description="Select a project from the sidebar." />
   
-  if (!isLoading && (data?.data?.length ?? 0) === 0) {
+  const rawData = data?.data ?? []
+  const stats = data?.stats
+  
+  if (!isLoading && rawData.length === 0) {
     return (
       <EmptyState 
         icon="↑" 
@@ -21,9 +24,16 @@ export default function Throughput() {
     )
   }
 
-  const chartData = data?.data ?? []
-  const avg = summary?.throughput_avg ?? 0
-  const trend = summary?.throughput_trend_pct ?? 0
+  // Transform API data (flat list) to ThroughputChart format (grouped by week with item types)
+  // API returns: [{ date: "2023-09-18", value: 1.0, by_type: null }]
+  // Chart expects: [{ week: "2023-W39", Total: 3, Task: 2, Bug: 1 }]
+  const chartData: any[] = rawData.map((item: any) => ({
+    week: item.date,
+    Total: item.value || 0,
+  }))
+
+  const avg = stats?.avg ?? 0
+  const trend = stats?.trend_pct ?? 0
 
   const granularityLabel = granularity === 'biweek' ? 'Bi-weekly' : granularity === 'month' ? 'Monthly' : granularity === 'day' ? 'Daily' : 'Weekly'
 
@@ -47,7 +57,7 @@ export default function Throughput() {
           <div className="text-sm font-bold">{granularityLabel} Throughput</div>
           <span className="text-[10px] font-semibold bg-primary/15 text-primary px-2 py-1 rounded-full">{granularityLabel}</span>
         </div>
-        <div className="text-xs text-muted mb-4">Items completed per {granularity === 'month' ? 'month' : granularity === 'biweek' ? 'two weeks' : granularity === 'day' ? 'day' : 'week'}, stacked by type</div>
+        <div className="text-xs text-muted mb-4">Items completed per {granularity === 'month' ? 'month' : granularity === 'biweek' ? 'two weeks' : granularity === 'day' ? 'day' : 'week'}</div>
         {isLoading ? <ChartSkeleton /> : <ThroughputChart data={chartData} weeks={weeks} />}
         <div className="mt-4 px-3 py-2 bg-surface2 rounded-lg text-xs text-muted2 border-l-2 border-primary">
           💡 Your team completes an average of <strong className="text-text">{avg.toFixed(1)} items per week</strong>.

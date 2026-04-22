@@ -22,7 +22,15 @@ export default function LeadTime() {
   }
 
   const stats = data?.stats
-  const scatter = data?.data ?? []
+  const rawData = data?.data ?? []
+  
+  // Transform API data to component format
+  const scatter = rawData.map((item: any) => ({
+    completed_at: item.date,
+    lead_time_days: item.value,
+    item_type: item.by_type?.item_type || 'Unknown',
+    item_key: item.by_type?.item_key || '',
+  }))
 
   return (
     <div className="space-y-5">

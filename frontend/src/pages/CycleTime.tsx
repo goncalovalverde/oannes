@@ -21,7 +21,15 @@ export default function CycleTime() {
   // Hook returns MetricResponse with both data items and stats
   // data.data = items array, data.stats = statistics object
   const stats = data?.stats
-  const allScatter = data?.data ?? []
+  const rawData = data?.data ?? []
+  
+  // Transform API data to component format
+  const allScatter = rawData.map((item: any) => ({
+    completed_at: item.date,
+    cycle_time_days: item.value,
+    item_type: item.by_type?.item_type || 'Unknown',
+    item_key: item.by_type?.item_key || '',
+  }))
   
   // Filter scatter data based on selected types
   const scatter = allScatter.filter((item: any) => selectedTypes.has(item.item_type))
