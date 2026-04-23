@@ -132,26 +132,43 @@ class MetricsService:
         df = self._get_items_df(project_id, weeks, item_type)
         
         if df.empty:
-            return MetricResponse(data=[], stats=MetricStats(avg=0), unit="items", period=granularity)
+            return MetricResponse(data=[], stats=MetricStats(avg=0, trend_pct=0), unit="items", period=granularity)
         
         done_col = self._get_done_column(project)
         if not done_col:
-            return MetricResponse(data=[], stats=MetricStats(avg=0), unit="items", period=granularity)
+            return MetricResponse(data=[], stats=MetricStats(avg=0, trend_pct=0), unit="items", period=granularity)
         
         # Calculate throughput
         result_df = calc_throughput(df, done_col, weeks, granularity=granularity)
         result_df = trim_leading_empty_buckets(result_df)
         
         if result_df.empty:
-            return MetricResponse(data=[], stats=MetricStats(avg=0), unit="items", period=granularity)
+            return MetricResponse(data=[], stats=MetricStats(avg=0, trend_pct=0), unit="items", period=granularity)
         
-        # Format as MetricDataPoint
-        data_points = self._generic_df_to_metric_points(result_df, "throughput")
-        avg_throughput = self._calculate_average([p.value for p in data_points]) if data_points else 0
+        # Format as MetricDataPoint with by_type breakdown
+        data_points = []
+        totals = []
+        for idx, row in result_df.iterrows():
+            total = int(row.get("Total", 0))
+            # Include breakdown by item type (all columns except 'Total')
+            by_type = {col: int(row[col]) for col in result_df.columns if col != "Total"} or None
+            totals.append(total)
+            data_points.append(MetricDataPoint(
+                date=idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx),
+                value=float(total),
+                by_type=by_type
+            ))
+        
+        # Calculate average and trend
+        avg_throughput = float(np.mean(totals)) if totals else 0
+        half = len(totals) // 2
+        trend_pct = 0.0
+        if half > 0 and np.mean(totals[:half]) > 0:
+            trend_pct = float((np.mean(totals[half:]) - np.mean(totals[:half])) / np.mean(totals[:half]) * 100)
         
         return MetricResponse(
             data=data_points,
-            stats=MetricStats(avg=round(avg_throughput, 1)),
+            stats=MetricStats(avg=round(avg_throughput, 1), trend_pct=round(trend_pct, 1)),
             unit="items",
             period=granularity
         )
