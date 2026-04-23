@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import io
 import csv
+import logging
 from database import get_db
 from models.project import Project
 from models.sync_job import CachedItem
@@ -24,6 +25,9 @@ from calculator.flow import (
     quality_rate as calc_quality_rate,
     trim_leading_empty_buckets,
 )
+from services.metrics_service import MetricsService, ProjectNotFound as ServiceProjectNotFound
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -122,146 +126,39 @@ def get_item_types(project_id: int, db: Session = Depends(get_db)):
 @router.get("/{project_id}/throughput", response_model=ResponseEnvelope[MetricResponse])
 def get_throughput(
     project_id: int,
-    weeks: int = Query(12),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
     item_type: str = Query("all"),
     granularity: Literal["day", "week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    df = get_items_df(project_id, weeks, item_type, db)
-    if df.empty:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0, trend_pct=0),
-                unit="items",
-                period=granularity
-            )
-        )
-
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-    done_steps = [s for s in steps if s.stage == "done"]
-    if not done_steps:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0, trend_pct=0),
-                unit="items",
-                period=granularity
-            )
-        )
-
-    done_col = done_steps[-1].display_name
-    if done_col not in df.columns:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0, trend_pct=0),
-                unit="items",
-                period=granularity
-            )
-        )
-
-    tp_df = calc_throughput(df, done_col=done_col, weeks=weeks, granularity=granularity)
-    tp_df = trim_leading_empty_buckets(tp_df)
-    if tp_df.empty:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0, trend_pct=0),
-                unit="items",
-                period=granularity
-            )
-        )
-
-    data_points = []
-    totals = []
-    for idx, row in tp_df.iterrows():
-        total = int(row.get("Total", 0))
-        by_type = {col: int(row[col]) for col in tp_df.columns if col != "Total"} or None
-        totals.append(total)
-        data_points.append(MetricDataPoint(
-            date=idx.strftime("%Y-%m-%d"),
-            value=float(total),
-            by_type=by_type
-        ))
-
-    avg = float(np.mean(totals)) if totals else 0
-    half = len(totals) // 2
-    if half > 0 and np.mean(totals[:half]) > 0:
-        trend_pct = float((np.mean(totals[half:]) - np.mean(totals[:half])) / np.mean(totals[:half]) * 100)
-    else:
-        trend_pct = 0.0
-
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=data_points,
-            stats=MetricStats(avg=round(avg, 1), trend_pct=round(trend_pct, 1)),
-            unit="items",
-            period=granularity
-        )
-    )
+    """Calculate throughput (items completed per period)."""
+    try:
+        service = MetricsService(db)
+        response = service.throughput(project_id, weeks, item_type, granularity)
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Throughput calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{project_id}/cycle-time", response_model=ResponseEnvelope[MetricResponse])
 def get_cycle_time(
     project_id: int,
-    weeks: int = Query(12),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
     item_type: str = Query("all"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    df = get_items_df(project_id, weeks, item_type, db)
-    if df.empty or "cycle_time_days" not in df.columns:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0, p50=None, p85=None, p95=None),
-                unit="days",
-                period="total"
-            )
-        )
-
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-    done_steps = [s for s in steps if s.stage == "done"]
-    done_col = done_steps[-1].display_name if done_steps else None
-
-    valid = df[df["cycle_time_days"].notna()].copy()
-    data = []
-    for _, row in valid.iterrows():
-        completed_at = row.get(done_col, row.get("created_at", None)) if done_col else row.get("created_at", None)
-        data.append(MetricDataPoint(
-            date=completed_at.strftime("%Y-%m-%d") if pd.notna(completed_at) and completed_at is not None else "",
-            value=float(row["cycle_time_days"]),
-            by_type={"item_key": str(row["item_key"]), "item_type": str(row["item_type"])}
-        ))
-
-    stats = cycle_time_stats(df)
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=data,
-            stats=MetricStats(
-                avg=stats.get("p50", 0) or 0,
-                p50=stats.get("p50"),
-                p85=stats.get("p85"),
-                p95=stats.get("p95")
-            ),
-            unit="days",
-            period="total"
-        )
-    )
+    """Calculate cycle time (median days from start to completion)."""
+    try:
+        service = MetricsService(db)
+        response = service.cycle_time(project_id, weeks, item_type, granularity="week")
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Cycle time calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{project_id}/cycle-time-interval", response_model=ResponseEnvelope[MetricResponse])
 def get_cycle_time_interval(
@@ -403,58 +300,20 @@ def get_lead_time(
 @router.get("/{project_id}/wip", response_model=ResponseEnvelope[MetricResponse])
 def get_wip(
     project_id: int,
-    weeks: int = Query(12),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
     item_type: str = Query("all"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    df = get_items_df(project_id, weeks * 2, item_type, db)
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-
-    if df.empty or not steps:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="items",
-                period="daily"
-            )
-        )
-
-    steps_list = [{"display_name": s.display_name, "stage": s.stage, "position": s.position, "source_statuses": s.source_statuses or []} for s in steps]
-    wip_df = wip_over_time(df, steps_list, weeks=weeks)
-    result = []
-    for _, row in wip_df.iterrows():
-        result.append(MetricDataPoint(
-            date=row["date"].strftime("%Y-%m-%d") if hasattr(row["date"], "strftime") else str(row["date"]),
-            value=int(row["count"]),
-            by_type={"stage": row["stage"]}
-        ))
-
-    current_wip = 0
-    in_flight_steps = [s for s in steps if s.stage == "in_flight"]
-    done_steps = [s for s in steps if s.stage == "done"]
-    if in_flight_steps and done_steps:
-        start_col = in_flight_steps[0].display_name
-        done_col = done_steps[-1].display_name
-        if start_col in df.columns and done_col in df.columns:
-            started = df[df[start_col].notna()]
-            not_done = started[started[done_col].isna()]
-            current_wip = len(not_done)
-
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=result,
-            stats=MetricStats(avg=float(current_wip)),
-            unit="items",
-            period="daily"
-        )
-    )
+    """Calculate Work In Progress (items currently in flight)."""
+    try:
+        service = MetricsService(db)
+        response = service.wip(project_id, weeks, item_type, granularity="week")
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"WIP calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{project_id}/cfd", response_model=ResponseEnvelope[MetricResponse])
 def get_cfd(
@@ -740,83 +599,24 @@ def get_net_flow(
 @router.get("/{project_id}/quality-rate", response_model=ResponseEnvelope[MetricResponse])
 def get_quality_rate(
     project_id: int,
-    weeks: int = Query(12),
-    item_type: str = Query("all"),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
+    item_type: str = Query("all", description="Filter by item type"),
     granularity: Literal["day", "week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db),
 ):
-    """Percentage of completed items that are NOT bugs/defects, bucketed by granularity."""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    df = get_items_df(project_id, weeks, item_type, db)
-    if df.empty:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="%",
-                period=granularity
-            )
-        )
-
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-    if not steps:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="%",
-                period=granularity
-            )
-        )
-
-    done_steps = [s for s in steps if s.stage == "done"]
-    done_col = done_steps[-1].display_name if done_steps else steps[-1].display_name
-
-    result_df = calc_quality_rate(df, done_col, weeks, granularity=granularity)
-    result_df = trim_leading_empty_buckets(result_df)
-    if result_df.empty:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="%",
-                period=granularity
-            )
-        )
-
-    result_df["week"] = result_df["week"].dt.strftime("%Y-%m-%d")
+    """Calculate quality rate (% of non-bug items completed).
     
-    # Convert DataFrame to MetricDataPoint format, using by_type to include total and bugs
-    data = []
-    avg_quality = 0
-    for _, row in result_df.iterrows():
-        data.append(MetricDataPoint(
-            date=row["week"],
-            value=float(row.get("quality_pct", 0)),
-            by_type={
-                "total": int(row.get("total", 0)),
-                "bugs": int(row.get("bugs", 0)),
-            }
-        ))
-        avg_quality += float(row.get("quality_pct", 0))
-    
-    avg_quality = avg_quality / len(data) if data else 0
-    
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=data,
-            stats=MetricStats(avg=round(avg_quality, 1)),
-            unit="%",
-            period=granularity
-        )
-    )
+    Returns percentage of completed items that are NOT bugs/defects, bucketed by time period.
+    """
+    try:
+        service = MetricsService(db)
+        response = service.quality_rate(project_id, weeks, item_type, granularity)
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Quality metrics calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{project_id}/summary", response_model=MetricsSummary)
