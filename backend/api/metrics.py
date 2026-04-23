@@ -247,55 +247,20 @@ def get_cycle_time_interval(
 @router.get("/{project_id}/lead-time", response_model=ResponseEnvelope[MetricResponse])
 def get_lead_time(
     project_id: int,
-    weeks: int = Query(12),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
     item_type: str = Query("all"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    df = get_items_df(project_id, weeks, item_type, db)
-    if df.empty or "lead_time_days" not in df.columns:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0, p50=None, p85=None, p95=None),
-                unit="days",
-                period="total"
-            )
-        )
-
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-    done_steps = [s for s in steps if s.stage == "done"]
-    done_col = done_steps[-1].display_name if done_steps else None
-
-    valid = df[df["lead_time_days"].notna()].copy()
-    data = []
-    for _, row in valid.iterrows():
-        completed_at = row.get(done_col, row.get("created_at", None)) if done_col else row.get("created_at", None)
-        data.append(MetricDataPoint(
-            date=completed_at.strftime("%Y-%m-%d") if pd.notna(completed_at) and completed_at is not None else "",
-            value=float(row["lead_time_days"]),
-            by_type={"item_key": str(row["item_key"]), "item_type": str(row["item_type"])}
-        ))
-
-    stats = lead_time_stats(df)
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=data,
-            stats=MetricStats(
-                avg=stats.get("p50", 0) or 0,
-                p50=stats.get("p50"),
-                p85=stats.get("p85"),
-                p95=stats.get("p95")
-            ),
-            unit="days",
-            period="total"
-        )
-    )
+    """Calculate lead time (created_at to done status)."""
+    try:
+        service = MetricsService(db)
+        response = service.lead_time(project_id, weeks, item_type)
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Lead time calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{project_id}/wip", response_model=ResponseEnvelope[MetricResponse])
 def get_wip(
@@ -318,282 +283,77 @@ def get_wip(
 @router.get("/{project_id}/cfd", response_model=ResponseEnvelope[MetricResponse])
 def get_cfd(
     project_id: int,
-    weeks: int = Query(12),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
     item_type: str = Query("all"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    df = get_items_df(project_id, weeks, item_type, db)
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-
-    if df.empty or not steps:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="items",
-                period="daily"
-            )
-        )
-
-    stage_names = [s.display_name for s in steps if s.display_name in df.columns]
-    if not stage_names:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="items",
-                period="daily"
-            )
-        )
-
-    steps_list = [{"display_name": s.display_name, "stage": s.stage, "position": s.position, "source_statuses": s.source_statuses or []} for s in steps]
-    cfd_df = calc_cfd(df, steps_list)
-    
-    result = []
-    for idx, row in cfd_df.iterrows():
-        date_str = idx.strftime("%Y-%m-%d")
-        for stage in stage_names:
-            count = int(row.get(stage, 0))
-            result.append(MetricDataPoint(
-                date=date_str,
-                value=float(count),
-                by_type={"stage": stage}
-            ))
-
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=result,
-            stats=MetricStats(avg=0),
-            unit="items",
-            period="daily"
-        )
-    )
+    """Calculate cumulative flow diagram data."""
+    try:
+        service = MetricsService(db)
+        response = service.cfd(project_id, weeks, item_type)
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"CFD calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{project_id}/aging-wip", response_model=ResponseEnvelope[MetricResponse])
 def get_aging_wip(
     project_id: int,
-    weeks: int = Query(12),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
     item_type: str = Query("all"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    """Calculate age of work in progress items (loads weeks*4 history)."""
+    try:
+        service = MetricsService(db)
+        response = service.aging_wip(project_id, weeks, item_type)
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Aging WIP calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-    df = get_items_df(project_id, weeks * 4, item_type, db)
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-
-    if df.empty or not steps:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="days",
-                period="total"
-            )
-        )
-
-    in_flight_steps = [s for s in steps if s.stage == "in_flight"]
-    done_steps = [s for s in steps if s.stage == "done"]
-
-    if not in_flight_steps or not done_steps:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="days",
-                period="total"
-            )
-        )
-
-    start_step = in_flight_steps[0]
-    done_col = done_steps[-1].display_name
-
-    stats = cycle_time_stats(df)
-    p85 = stats.get("p85")
-
-    start_col = start_step.display_name
-    if start_col not in df.columns:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=p85 or 0, p85=p85),
-                unit="days",
-                period="total"
-            )
-        )
-
-    in_progress = df[df[start_col].notna()]
-    if done_col in df.columns:
-        in_progress = in_progress[in_progress[done_col].isna()]
-
-    now = pd.Timestamp(_now())
-    result = []
-    ages = []
-    for _, row in in_progress.iterrows():
-        age = (now - row[start_col]).days if pd.notna(row[start_col]) else 0
-
-        current_stage = start_step.display_name
-        for step in reversed(steps):
-            sc = step.display_name
-            if sc in df.columns and pd.notna(row.get(sc)):
-                current_stage = step.display_name
-                break
-
-        result.append(MetricDataPoint(
-            date="",
-            value=float(age),
-            by_type={
-                "item_key": str(row["item_key"]),
-                "item_type": str(row["item_type"]),
-                "stage": current_stage,
-                "is_over_85th": p85 is not None and age > p85
-            }
-        ))
-        ages.append(float(age))
-
-    result.sort(key=lambda x: x.value, reverse=True)
-    avg_age = float(np.mean(ages)) if ages else 0
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=result,
-            stats=MetricStats(avg=round(avg_age, 1), p85=p85),
-            unit="days",
-            period="total"
-        )
-    )
-
+@router.get("/{project_id}/flow-efficiency", response_model=ResponseEnvelope[MetricResponse])
 @router.get("/{project_id}/flow-efficiency", response_model=ResponseEnvelope[MetricResponse])
 def get_flow_efficiency(
     project_id: int,
-    weeks: int = Query(12),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
     item_type: str = Query("all"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    df = get_items_df(project_id, weeks, item_type, db)
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-
-    if df.empty or not steps:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="%",
-                period="total"
-            )
-        )
-
-    steps_list = [{"display_name": s.display_name, "stage": s.stage, "position": s.position, "source_statuses": s.source_statuses or []} for s in steps]
-    fe = calc_flow_efficiency(df, steps_list)
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=[MetricDataPoint(date="", value=float(fe))],
-            stats=MetricStats(avg=float(fe)),
-            unit="%",
-            period="total"
-        )
-    )
+    """Calculate flow efficiency (active time / total time)."""
+    try:
+        service = MetricsService(db)
+        response = service.flow_efficiency(project_id, weeks, item_type)
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Flow efficiency calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{project_id}/net-flow", response_model=ResponseEnvelope[MetricResponse])
 def get_net_flow(
     project_id: int,
-    weeks: int = Query(12),
+    weeks: int = Query(520, ge=1, le=520, description="Time window in weeks (1-520)"),
     item_type: str = Query("all"),
     granularity: Literal["day", "week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db),
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    df = get_items_df(project_id, weeks, item_type, db)
-    if df.empty:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="items",
-                period=granularity
-            )
-        )
-
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-    if not steps:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="items",
-                period=granularity
-            )
-        )
-
-    start_col = next((s.display_name for s in steps if s.stage in ("start", "in_flight")), steps[0].display_name)
-    done_col  = next((s.display_name for s in reversed(steps) if s.stage == "done"), steps[-1].display_name)
-
-    result_df = calc_net_flow(df, start_col, done_col, weeks, granularity=granularity)
-    result_df = trim_leading_empty_buckets(result_df)
-    if result_df.empty:
-        return ResponseEnvelope(
-            status="success",
-            data=MetricResponse(
-                data=[],
-                stats=MetricStats(avg=0),
-                unit="items",
-                period=granularity
-            )
-        )
-
-    records = result_df.copy()
-    records["week"] = records["week"].dt.strftime("%Y-%m-%d")
-    
-    data = []
-    net_values = []
-    for _, row in records.iterrows():
-        arrivals = int(row.get("arrivals", 0))
-        completions = int(row.get("completions", 0))
-        net = int(row.get("net", 0))
-        data.append(MetricDataPoint(
-            date=row["week"],
-            value=float(net),
-            by_type={
-                "arrivals": arrivals,
-                "completions": completions,
-                "net": net
-            }
-        ))
-        net_values.append(net)
-
-    avg_value = float(np.mean(net_values)) if net_values else 0
-    return ResponseEnvelope(
-        status="success",
-        data=MetricResponse(
-            data=data,
-            stats=MetricStats(avg=round(avg_value, 1)),
-            unit="items",
-            period=granularity
-        )
-    )
+    """Calculate net flow (items completed - items added)."""
+    try:
+        service = MetricsService(db)
+        response = service.net_flow(project_id, weeks, item_type, granularity)
+        return ResponseEnvelope(status="success", data=response)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Net flow calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{project_id}/quality-rate", response_model=ResponseEnvelope[MetricResponse])

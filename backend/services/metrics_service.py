@@ -291,21 +291,78 @@ class MetricsService:
         )
     
     # ------------------------------------------------------------------
-    # Flow Efficiency
+    # Lead Time Metrics
     # ------------------------------------------------------------------
     
-    def flow_efficiency(self, project_id: int, weeks: int, item_type: str = "all",
-                       granularity: str = "week") -> MetricResponse:
-        """Calculate flow efficiency (active time / total time).
+    def lead_time(self, project_id: int, weeks: int, item_type: str = "all") -> MetricResponse:
+        """Calculate lead time (created_at to done status).
         
         Args:
             project_id: Project ID
             weeks: Time window in weeks
             item_type: Filter by item type ('all' for no filter)
-            granularity: Time bucket ('day', 'week', 'biweek', 'month')
         
         Returns:
-            MetricResponse with flow efficiency data (0-100%)
+            MetricResponse with individual lead time values and percentiles
+        
+        Raises:
+            ProjectNotFound: If project doesn't exist
+        """
+        project = self._get_project(project_id)
+        df = self._get_items_df(project_id, weeks, item_type)
+        
+        if df.empty or "lead_time_days" not in df.columns:
+            return MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0, p50=None, p85=None, p95=None),
+                unit="days",
+                period="total"
+            )
+        
+        steps = sorted(project.workflow_steps, key=lambda s: s.position)
+        done_steps = [s for s in steps if s.stage == "done"]
+        done_col = done_steps[-1].display_name if done_steps else None
+        
+        # Filter to valid lead times and build data points
+        valid = df[df["lead_time_days"].notna()].copy()
+        data = []
+        for _, row in valid.iterrows():
+            completed_at = row.get(done_col, row.get("created_at", None)) if done_col else row.get("created_at", None)
+            data.append(MetricDataPoint(
+                date=completed_at.strftime("%Y-%m-%d") if pd.notna(completed_at) and completed_at is not None else "",
+                value=float(row["lead_time_days"]),
+                by_type={"item_key": str(row["item_key"]), "item_type": str(row["item_type"])}
+            ))
+        
+        # Calculate stats
+        stats = lead_time_stats(df)
+        
+        return MetricResponse(
+            data=data,
+            stats=MetricStats(
+                avg=stats.get("p50", 0) or 0,
+                p50=stats.get("p50"),
+                p85=stats.get("p85"),
+                p95=stats.get("p95")
+            ),
+            unit="days",
+            period="total"
+        )
+    
+    # ------------------------------------------------------------------
+    # CFD Metrics
+    # ------------------------------------------------------------------
+    
+    def cfd(self, project_id: int, weeks: int, item_type: str = "all") -> MetricResponse:
+        """Calculate cumulative flow diagram data.
+        
+        Args:
+            project_id: Project ID
+            weeks: Time window in weeks
+            item_type: Filter by item type ('all' for no filter)
+        
+        Returns:
+            MetricResponse with cumulative item counts by stage over time
         
         Raises:
             ProjectNotFound: If project doesn't exist
@@ -314,28 +371,213 @@ class MetricsService:
         df = self._get_items_df(project_id, weeks, item_type)
         
         if df.empty:
-            return MetricResponse(data=[], stats=MetricStats(avg=0), unit="%", period=granularity)
+            return MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period="daily"
+            )
         
-        done_col = self._get_done_column(project)
-        if not done_col:
-            return MetricResponse(data=[], stats=MetricStats(avg=0), unit="%", period=granularity)
+        steps = sorted(project.workflow_steps, key=lambda s: s.position)
+        if not steps:
+            return MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period="daily"
+            )
         
-        # Calculate flow efficiency
-        result_df = calc_flow_efficiency(df, done_col, weeks, granularity=granularity)
-        result_df = trim_leading_empty_buckets(result_df)
+        # Only include stages that exist in the data
+        stage_names = [s.display_name for s in steps if s.display_name in df.columns]
+        if not stage_names:
+            return MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="items",
+                period="daily"
+            )
         
-        if result_df.empty:
-            return MetricResponse(data=[], stats=MetricStats(avg=0), unit="%", period=granularity)
+        # Build steps list for calculator
+        steps_list = [{
+            "display_name": s.display_name,
+            "stage": s.stage,
+            "position": s.position,
+            "source_statuses": s.source_statuses or []
+        } for s in steps]
         
-        # Format as MetricDataPoint
-        data_points = self._generic_df_to_metric_points(result_df, "flow_efficiency")
-        avg_fe = self._calculate_average([p.value for p in data_points]) if data_points else 0
+        # Calculate CFD
+        cfd_df = calc_cfd(df, steps_list)
+        
+        # Convert to metric data points (one point per date+stage combination)
+        result = []
+        for idx, row in cfd_df.iterrows():
+            date_str = idx.strftime("%Y-%m-%d")
+            for stage in stage_names:
+                count = int(row.get(stage, 0))
+                result.append(MetricDataPoint(
+                    date=date_str,
+                    value=float(count),
+                    by_type={"stage": stage}
+                ))
         
         return MetricResponse(
-            data=data_points,
-            stats=MetricStats(avg=round(avg_fe, 1)),
+            data=result,
+            stats=MetricStats(avg=0),
+            unit="items",
+            period="daily"
+        )
+    
+    # ------------------------------------------------------------------
+    # Aging WIP Metrics
+    # ------------------------------------------------------------------
+    
+    def aging_wip(self, project_id: int, weeks: int, item_type: str = "all") -> MetricResponse:
+        """Calculate age of work in progress items.
+        
+        Note: Loads data for weeks*4 to include old items still in flight.
+        
+        Args:
+            project_id: Project ID
+            weeks: Time window in weeks (multiplied by 4 internally for data loading)
+            item_type: Filter by item type ('all' for no filter)
+        
+        Returns:
+            MetricResponse with individual item ages, sorted descending
+        
+        Raises:
+            ProjectNotFound: If project doesn't exist
+        """
+        project = self._get_project(project_id)
+        # Load with weeks*4 to capture old items still in flight
+        df = self._get_items_df(project_id, weeks * 4, item_type)
+        
+        if df.empty:
+            return MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="days",
+                period="total"
+            )
+        
+        steps = sorted(project.workflow_steps, key=lambda s: s.position)
+        in_flight_steps = [s for s in steps if s.stage == "in_flight"]
+        done_steps = [s for s in steps if s.stage == "done"]
+        
+        if not in_flight_steps or not done_steps:
+            return MetricResponse(
+                data=[],
+                stats=MetricStats(avg=0),
+                unit="days",
+                period="total"
+            )
+        
+        start_step = in_flight_steps[0]
+        done_col = done_steps[-1].display_name
+        start_col = start_step.display_name
+        
+        # Check if start column exists
+        if start_col not in df.columns:
+            stats = cycle_time_stats(df)
+            p75 = stats.get("p75")
+            return MetricResponse(
+                data=[],
+                stats=MetricStats(avg=p75 or 0, p75=p75),
+                unit="days",
+                period="total"
+            )
+        
+        # Get p75 for threshold (using p75 since MetricStats doesn't have p85)
+        stats = cycle_time_stats(df)
+        p75 = stats.get("p75")
+        # Note: original code used p85, but MetricStats doesn't have p85 field
+        p85_threshold = stats.get("p85")  # Store for is_over_85th check
+        
+        # Find items in progress (started but not done)
+        in_progress = df[df[start_col].notna()].copy()
+        if done_col in df.columns:
+            in_progress = in_progress[in_progress[done_col].isna()]
+        
+        # Calculate age for each item
+        now = pd.Timestamp(_utcnow())
+        result = []
+        ages = []
+        for _, row in in_progress.iterrows():
+            age = (now - row[start_col]).days if pd.notna(row[start_col]) else 0
+            
+            # Find current stage (most recent stage touched)
+            current_stage = start_step.display_name
+            for step in reversed(steps):
+                sc = step.display_name
+                if sc in df.columns and pd.notna(row.get(sc)):
+                    current_stage = step.display_name
+                    break
+            
+            result.append(MetricDataPoint(
+                date="",
+                value=float(age),
+                by_type={
+                    "item_key": str(row["item_key"]),
+                    "item_type": str(row["item_type"]),
+                    "stage": current_stage,
+                    "is_over_85th": p85_threshold is not None and age > p85_threshold
+                }
+            ))
+            ages.append(float(age))
+        
+        # Sort by age descending
+        result.sort(key=lambda x: x.value, reverse=True)
+        avg_age = float(np.mean(ages)) if ages else 0
+        
+        return MetricResponse(
+            data=result,
+            stats=MetricStats(avg=round(avg_age, 1), p75=p75),
+            unit="days",
+            period="total"
+        )
+    
+    # ------------------------------------------------------------------
+    # Flow Efficiency
+    
+    def flow_efficiency(self, project_id: int, weeks: int, item_type: str = "all") -> MetricResponse:
+        """Calculate flow efficiency (active time / total time).
+        
+        Args:
+            project_id: Project ID
+            weeks: Time window in weeks (not used by calculator but kept for interface consistency)
+            item_type: Filter by item type ('all' for no filter)
+        
+        Returns:
+            MetricResponse with single flow efficiency value (0-100%)
+        
+        Raises:
+            ProjectNotFound: If project doesn't exist
+        """
+        project = self._get_project(project_id)
+        df = self._get_items_df(project_id, weeks, item_type)
+        
+        if df.empty:
+            return MetricResponse(data=[], stats=MetricStats(avg=0), unit="%", period="total")
+        
+        steps = project.workflow_steps
+        if not steps:
+            return MetricResponse(data=[], stats=MetricStats(avg=0), unit="%", period="total")
+        
+        # Build steps list for calculator
+        steps_list = [{
+            "display_name": s.display_name,
+            "stage": s.stage,
+            "position": s.position,
+            "source_statuses": s.source_statuses or []
+        } for s in sorted(steps, key=lambda x: x.position)]
+        
+        # Calculate flow efficiency (returns single float)
+        fe = calc_flow_efficiency(df, steps_list)
+        
+        return MetricResponse(
+            data=[MetricDataPoint(date="", value=float(fe))],
+            stats=MetricStats(avg=float(fe)),
             unit="%",
-            period=granularity
+            period="total"
         )
     
     # ------------------------------------------------------------------
@@ -353,7 +595,7 @@ class MetricsService:
             granularity: Time bucket ('day', 'week', 'biweek', 'month')
         
         Returns:
-            MetricResponse with net flow data
+            MetricResponse with net flow data (arrivals - completions per period)
         
         Raises:
             ProjectNotFound: If project doesn't exist
@@ -364,24 +606,47 @@ class MetricsService:
         if df.empty:
             return MetricResponse(data=[], stats=MetricStats(avg=0), unit="items", period=granularity)
         
-        done_col = self._get_done_column(project)
-        if not done_col:
+        steps = sorted(project.workflow_steps, key=lambda s: s.position)
+        if not steps:
             return MetricResponse(data=[], stats=MetricStats(avg=0), unit="items", period=granularity)
         
+        # Find start and done columns
+        start_col = next((s.display_name for s in steps if s.stage in ("start", "in_flight")), steps[0].display_name)
+        done_col = next((s.display_name for s in reversed(steps) if s.stage == "done"), steps[-1].display_name)
+        
         # Calculate net flow
-        result_df = calc_net_flow(df, done_col, weeks, granularity=granularity)
+        result_df = calc_net_flow(df, start_col, done_col, weeks, granularity=granularity)
         result_df = trim_leading_empty_buckets(result_df)
         
         if result_df.empty:
             return MetricResponse(data=[], stats=MetricStats(avg=0), unit="items", period=granularity)
         
-        # Format as MetricDataPoint
-        data_points = self._generic_df_to_metric_points(result_df, "net_flow")
-        avg_nf = self._calculate_average([p.value for p in data_points]) if data_points else 0
+        # Format as MetricDataPoint with breakdown
+        records = result_df.copy()
+        records["week"] = records["week"].dt.strftime("%Y-%m-%d")
+        
+        data = []
+        net_values = []
+        for _, row in records.iterrows():
+            arrivals = int(row.get("arrivals", 0))
+            completions = int(row.get("completions", 0))
+            net = int(row.get("net", 0))
+            data.append(MetricDataPoint(
+                date=row["week"],
+                value=float(net),
+                by_type={
+                    "arrivals": arrivals,
+                    "completions": completions,
+                    "net": net
+                }
+            ))
+            net_values.append(net)
+        
+        avg_value = float(np.mean(net_values)) if net_values else 0
         
         return MetricResponse(
-            data=data_points,
-            stats=MetricStats(avg=round(avg_nf, 1)),
+            data=data,
+            stats=MetricStats(avg=round(avg_value, 1)),
             unit="items",
             period=granularity
         )

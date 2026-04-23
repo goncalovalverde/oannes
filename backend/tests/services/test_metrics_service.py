@@ -95,6 +95,48 @@ class TestMetricsService:
         assert isinstance(response, MetricResponse)
         assert response.unit == "items"
     
+    def test_lead_time_returns_metric_response(self, db, sample_project):
+        """Service should return MetricResponse with lead time percentiles."""
+        service = MetricsService(db)
+        response = service.lead_time(
+            project_id=sample_project.id,
+            weeks=520,
+            item_type="all"
+        )
+        
+        assert isinstance(response, MetricResponse)
+        assert response.unit == "days"
+        assert response.period == "total"
+        # Should have percentile stats
+        assert hasattr(response.stats, "p50")
+        assert hasattr(response.stats, "p95")
+    
+    def test_cfd_returns_metric_response(self, db, sample_project):
+        """Service should return MetricResponse with CFD data."""
+        service = MetricsService(db)
+        response = service.cfd(
+            project_id=sample_project.id,
+            weeks=520,
+            item_type="all"
+        )
+        
+        assert isinstance(response, MetricResponse)
+        assert response.unit == "items"
+        assert response.period == "daily"
+    
+    def test_aging_wip_returns_metric_response(self, db, sample_project):
+        """Service should return MetricResponse with aging WIP data."""
+        service = MetricsService(db)
+        response = service.aging_wip(
+            project_id=sample_project.id,
+            weeks=520,
+            item_type="all"
+        )
+        
+        assert isinstance(response, MetricResponse)
+        assert response.unit == "days"
+        assert response.period == "total"
+    
     def test_flow_efficiency_returns_percentage(self, db, sample_project):
         """Service should return MetricResponse with flow efficiency (0-100%)."""
         service = MetricsService(db)
