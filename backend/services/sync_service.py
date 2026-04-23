@@ -15,6 +15,7 @@ from calculator.flow import compute_workflow_timestamps_from_transitions, comput
 from connectors import get_connector
 from models.project import Project
 from models.sync_job import CachedItem, SyncJob
+from models.item_transition import ItemTransition
 
 logger = logging.getLogger(__name__)
 
@@ -140,9 +141,9 @@ class SyncService:
             item_key = str(row.get("item_key", ""))
             ct = row.get("cycle_time_days")
             lt = row.get("lead_time_days")
-            transitions = row.get("status_transitions")
-            if isinstance(transitions, float):
-                transitions = None  # NaN from DataFrame
+            transitions_list = row.get("status_transitions")
+            if isinstance(transitions_list, float):
+                transitions_list = None  # NaN from DataFrame
 
             existing = existing_map.get(item_key)
             
@@ -153,10 +154,12 @@ class SyncService:
                 existing.workflow_timestamps = row.get("workflow_timestamps", {})
                 existing.cycle_time_days = ct if ct is not None and pd.notna(ct) else None
                 existing.lead_time_days = lt if lt is not None and pd.notna(lt) else None
-                if transitions is not None:
-                    existing.status_transitions = transitions
+                
+                # Store transitions in the new table
+                if transitions_list:
+                    self._store_transitions(existing.id, transitions_list)
             else:
-                db.add(CachedItem(
+                new_item = CachedItem(
                     project_id=project_id,
                     item_key=item_key,
                     item_type=str(row.get("item_type", "Unknown")),
@@ -165,9 +168,50 @@ class SyncService:
                     workflow_timestamps=row.get("workflow_timestamps", {}),
                     cycle_time_days=ct if ct is not None and pd.notna(ct) else None,
                     lead_time_days=lt if lt is not None and pd.notna(lt) else None,
-                    status_transitions=transitions,
-                ))
+                )
+                db.add(new_item)
+                db.flush()  # Get the ID
+                
+                # Store transitions in the new table
+                if transitions_list:
+                    self._store_transitions(new_item.id, transitions_list)
 
+        db.flush()
+
+    def _store_transitions(self, item_id: int, transitions_list: list) -> None:
+        """Store transitions in the item_transitions table.
+        
+        Transitions are expected to be a list of dicts with 'to_status' and 'transitioned_at' keys.
+        """
+        if not transitions_list:
+            return
+        
+        db = self._db
+        
+        # Clear existing transitions for this item
+        db.query(ItemTransition).filter(ItemTransition.item_id == item_id).delete()
+        
+        # Insert new transitions
+        for transition in transitions_list:
+            if isinstance(transition, dict):
+                to_status = transition.get("to_status")
+                transitioned_at = transition.get("transitioned_at")
+                
+                if to_status and transitioned_at:
+                    # Parse datetime if it's a string
+                    if isinstance(transitioned_at, str):
+                        try:
+                            transitioned_at = pd.to_datetime(transitioned_at)
+                        except Exception as e:
+                            logger.warning(f"Failed to parse transition datetime {transitioned_at}: {e}")
+                            continue
+                    
+                    db.add(ItemTransition(
+                        item_id=item_id,
+                        to_status=str(to_status),
+                        transitioned_at=transitioned_at
+                    ))
+        
         db.flush()
 
     def recompute_workflow_timestamps(self, project_id: int) -> dict:

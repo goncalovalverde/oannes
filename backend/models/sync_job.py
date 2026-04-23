@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float, JSON, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from database import Base
+from models.item_transition import ItemTransition
 
 class SyncJob(Base):
     __tablename__ = "sync_jobs"
@@ -28,8 +29,6 @@ class CachedItem(Base):
     workflow_timestamps = Column(JSON)
     cycle_time_days = Column(Float, nullable=True)
     lead_time_days = Column(Float, nullable=True)
-    # Full ordered status transition history. Each entry:
-    #   {"from_status": str|null, "to_status": str, "transitioned_at": ISO-8601 str}
-    # First entry is synthetic (from_status=null) representing the initial status at creation.
-    # NULL means the item was synced before this feature was added (needs re-sync to populate).
-    status_transitions = Column(JSON, nullable=True)
+    
+    # Relationship to transitions
+    transitions = relationship("ItemTransition", cascade="all, delete-orphan")

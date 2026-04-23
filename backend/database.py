@@ -37,7 +37,7 @@ def get_db():
         db.close()
 
 def init_db():
-    from models import project, sync_job
+    from models import project, sync_job, item_transition
     Base.metadata.create_all(bind=engine)
     migrate_schema()
 
@@ -50,7 +50,7 @@ def migrate_schema() -> None:
     from sqlalchemy import text
     db = SessionLocal()
     try:
-        # Check and add status_transitions column to cached_items
+        # Check and add status_transitions column to cached_items (legacy support)
         result = db.execute(text("PRAGMA table_info(cached_items)"))
         columns = {row[1] for row in result}
         if "status_transitions" not in columns:
