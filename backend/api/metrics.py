@@ -696,16 +696,23 @@ def get_net_flow(
     records["week"] = records["week"].dt.strftime("%Y-%m-%d")
     
     data = []
-    values = []
+    net_values = []
     for _, row in records.iterrows():
-        value = float(row.get("net_flow", 0))
+        arrivals = int(row.get("arrivals", 0))
+        completions = int(row.get("completions", 0))
+        net = int(row.get("net", 0))
         data.append(MetricDataPoint(
             date=row["week"],
-            value=value
+            value=float(net),
+            by_type={
+                "arrivals": arrivals,
+                "completions": completions,
+                "net": net
+            }
         ))
-        values.append(value)
+        net_values.append(net)
 
-    avg_value = float(np.mean(values)) if values else 0
+    avg_value = float(np.mean(net_values)) if net_values else 0
     return ResponseEnvelope(
         status="success",
         data=MetricResponse(

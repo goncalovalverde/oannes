@@ -61,12 +61,12 @@ export default function Dashboard() {
     return base
   })
 
-  // Transform netflow data: { date, value, by_type } → { week, arrivals, completions, net }
+  // Transform netflow data: { date, value, by_type: { arrivals, completions, net } } → { week, arrivals, completions, net }
   const transformedNetFlow = netFlowData.map((item: any) => ({
     week: item.date,
-    arrivals: item.value,
-    completions: item.value,
-    net: item.value,
+    arrivals: item.by_type?.arrivals ?? 0,
+    completions: item.by_type?.completions ?? 0,
+    net: item.by_type?.net ?? item.value ?? 0,
   }))
 
   // Transform quality data: { date, value, by_type } → { week, total, bugs, quality_pct }
