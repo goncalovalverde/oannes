@@ -609,9 +609,13 @@ def run_monte_carlo(data: MonteCarloRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     from calculator.monte_carlo import simulate_when_done, simulate_how_many
-
-    tp = get_throughput(data.project_id, data.weeks_history, "all", granularity="week", db=db)
-    throughput_series = [p["total"] for p in tp.get("data", []) if p["total"] > 0]
+    
+    service = MetricsService(db)
+    try:
+        tp = service.throughput(data.project_id, data.weeks_history, "all", granularity="week")
+        throughput_series = [p.value for p in tp.data if p.value > 0]
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
     if not throughput_series:
         raise HTTPException(status_code=400, detail="Insufficient throughput data for simulation")
