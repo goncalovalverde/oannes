@@ -250,12 +250,21 @@ class SyncService:
         skipped = 0
 
         for item in items:
-            if item.status_transitions is None:
+            # Convert ItemTransition objects to the format expected by compute_workflow_timestamps_from_transitions
+            if not item.transitions:
                 skipped += 1
                 continue
+            
+            transitions_list = [
+                {
+                    "to_status": t.to_status,
+                    "transitioned_at": t.transitioned_at,
+                }
+                for t in item.transitions
+            ]
 
             new_timestamps = compute_workflow_timestamps_from_transitions(
-                item.status_transitions, steps
+                transitions_list, steps
             )
             item.workflow_timestamps = new_timestamps
 

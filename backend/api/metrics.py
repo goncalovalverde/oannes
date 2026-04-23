@@ -37,6 +37,17 @@ def get_items_df(project_id: int, weeks: int, item_type: str, db: Session) -> pd
 
     records = []
     for item in items:
+        # Convert ItemTransition objects to list of dicts for compatibility with sync_service
+        status_transitions = None
+        if item.transitions:
+            status_transitions = [
+                {
+                    "to_status": t.to_status,
+                    "transitioned_at": t.transitioned_at,
+                }
+                for t in item.transitions
+            ]
+        
         record = {
             "item_key": item.item_key,
             "item_type": item.item_type,
@@ -44,6 +55,7 @@ def get_items_df(project_id: int, weeks: int, item_type: str, db: Session) -> pd
             "created_at": item.created_at,
             "cycle_time_days": item.cycle_time_days,
             "lead_time_days": item.lead_time_days,
+            "status_transitions": status_transitions,
         }
         if item.workflow_timestamps:
             record.update(item.workflow_timestamps)
@@ -53,7 +65,7 @@ def get_items_df(project_id: int, weeks: int, item_type: str, db: Session) -> pd
     if df.empty:
         return df
 
-    date_cols = [c for c in df.columns if c not in {"item_key", "item_type", "creator", "cycle_time_days", "lead_time_days"}]
+    date_cols = [c for c in df.columns if c not in {"item_key", "item_type", "creator", "cycle_time_days", "lead_time_days", "status_transitions"}]
     for col in date_cols:
         try:
             df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
@@ -919,10 +931,6 @@ def get_raw_data(
     if df.empty:
         return {"data": [], "columns": []}
 
-    # Build a lookup of status_transitions by item_key
-    items = db.query(CachedItem).filter(CachedItem.project_id == project_id).all()
-    transitions_by_key: dict = {i.item_key: i.status_transitions for i in items}
-
     steps = sorted(project.workflow_steps, key=lambda s: s.position)
     step_cols = [s.display_name for s in steps if s.display_name in df.columns]
 
@@ -940,8 +948,14 @@ def get_raw_data(
                 rec[col] = val.strftime("%Y-%m-%d")
             else:
                 rec[col] = val
-        item_key = rec.get("item_key", "")
-        rec["status_transitions"] = transitions_by_key.get(item_key) or []
+        
+        # Include status_transitions from the DataFrame
+        transitions = df.loc[_, "status_transitions"] if "status_transitions" in df.columns else None
+        if transitions:
+            rec["status_transitions"] = transitions
+        else:
+            rec["status_transitions"] = []
+        
         result.append(rec)
 
     return {"data": result, "columns": display_cols}
@@ -1017,13 +1031,9 @@ def get_available_statuses(
 
     statuses: set[str] = set()
     for item in items:
-        for t in (item.status_transitions or []):
-            ts = t.get("to_status")
-            if ts:
-                statuses.add(ts)
-            fs = t.get("from_status")
-            if fs:
-                statuses.add(fs)
+        # Use the transitions relationship instead of status_transitions attribute
+        for transition in (item.transitions or []):
+            statuses.add(transition.to_status)
 
     return {"statuses": sorted(statuses)}
 
