@@ -511,7 +511,7 @@ class MetricsService:
                     break
             
             result.append(MetricDataPoint(
-                date="",
+                date=f"{int(age)}d",
                 value=float(age),
                 by_type={
                     "item_key": str(row["item_key"]),
