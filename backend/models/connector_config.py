@@ -35,14 +35,17 @@ class JiraConfig(BaseModel):
     - api_version: API version to use ("v2" or "v3", auto-detected if not specified)
     - request_delay_ms: Delay between requests in milliseconds (default: 100)
     - max_retries: Maximum retries on rate limit (default: 3)
+    
+    Note: Accepts both 'url' and 'jira_url', both 'email' and 'username' for compatibility
+    with different API versions.
     """
     
-    jira_url: str = Field(
-        ..., 
+    jira_url: Optional[str] = Field(
+        None, 
         description="Jira instance URL"
     )
-    username: str = Field(
-        ..., 
+    username: Optional[str] = Field(
+        None,
         description="Jira username or email"
     )
     api_token: Optional[str] = Field(
@@ -86,20 +89,56 @@ class JiraConfig(BaseModel):
     @classmethod
     def validate_jira_url(cls, v):
         """Ensure URL is properly formatted."""
+        if not v:
+            return v
         if not v.startswith(('http://', 'https://')):
             raise ValueError('jira_url must start with http:// or https://')
         if v.endswith('/'):
             return v[:-1]  # Remove trailing slash
         return v
     
-    @model_validator(mode='after')
-    def validate_auth_token(self):
-        """Ensure appropriate auth token is provided for auth_type."""
-        if self.auth_type == AuthTypeEnum.API_TOKEN and not self.api_token:
-            raise ValueError('api_token is required when auth_type is "api_token"')
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_field_names(cls, data):
+        """Accept field name variants for compatibility with frontend form.
         
-        if self.auth_type == AuthTypeEnum.PERSONAL_ACCESS_TOKEN and not self.personal_access_token:
-            raise ValueError('personal_access_token is required when auth_type is "personal_access_token"')
+        Maps:
+        - 'url' -> 'jira_url'
+        - 'email' -> 'username'
+        - 'jira_api_version' -> 'api_version'
+        """
+        if isinstance(data, dict):
+            # Map 'url' -> 'jira_url' if not already set
+            if 'url' in data and 'jira_url' not in data:
+                data['jira_url'] = data.pop('url')
+            # Map 'email' -> 'username' if not already set
+            if 'email' in data and 'username' not in data:
+                data['username'] = data.pop('email')
+            # Map 'jira_api_version' -> 'api_version' if not already set
+            if 'jira_api_version' in data and 'api_version' not in data:
+                data['api_version'] = data.pop('jira_api_version')
+        return data
+    
+    @model_validator(mode='after')
+    def validate_required_and_auth_token(self):
+        """Ensure required fields are present and appropriate auth token is provided.
+        
+        For API token auth: requires jira_url, username, and api_token
+        For PAT auth: requires jira_url and personal_access_token (username not needed)
+        """
+        # jira_url is always required
+        if not self.jira_url:
+            raise ValueError('jira_url is required')
+        
+        # Validate auth-specific requirements
+        if self.auth_type == AuthTypeEnum.API_TOKEN:
+            if not self.username:
+                raise ValueError('username is required when auth_type is "api_token"')
+            if not self.api_token:
+                raise ValueError('api_token is required when auth_type is "api_token"')
+        elif self.auth_type == AuthTypeEnum.PERSONAL_ACCESS_TOKEN:
+            if not self.personal_access_token:
+                raise ValueError('personal_access_token is required when auth_type is "personal_access_token"')
         
         return self
     
@@ -164,23 +203,23 @@ class TrelloConfig(BaseModel):
     
     Required:
     - api_key: Trello API key
-    - api_token: Trello API token
+    - api_token: Trello API token (also accepts 'token' for compatibility)
     - board_id: Trello board ID
     
     Optional:
     - max_retries: Maximum retries on rate limit (default: 3)
     """
     
-    api_key: str = Field(
-        ...,
+    api_key: Optional[str] = Field(
+        None,
         description="Trello API key"
     )
-    api_token: str = Field(
-        ...,
+    api_token: Optional[str] = Field(
+        None,
         description="Trello API token"
     )
-    board_id: str = Field(
-        ...,
+    board_id: Optional[str] = Field(
+        None,
         description="Trello board ID"
     )
     max_retries: int = Field(
@@ -189,6 +228,30 @@ class TrelloConfig(BaseModel):
         le=10,
         description="Maximum retries on rate limit (1-10)"
     )
+    
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_field_names(cls, data):
+        """Accept field name variants for compatibility with frontend form.
+        
+        Maps:
+        - 'token' -> 'api_token'
+        """
+        if isinstance(data, dict):
+            if 'token' in data and 'api_token' not in data:
+                data['api_token'] = data.pop('token')
+        return data
+    
+    @model_validator(mode='after')
+    def validate_required_fields(self):
+        """Ensure all required fields are present."""
+        if not self.api_key:
+            raise ValueError('api_key is required')
+        if not self.api_token:
+            raise ValueError('api_token is required')
+        if not self.board_id:
+            raise ValueError('board_id is required')
+        return self
 
 
 class AzureDevOpsConfig(BaseModel):
@@ -198,21 +261,22 @@ class AzureDevOpsConfig(BaseModel):
     - organization: Azure DevOps organization name
     - project: Project name
     - pat: Personal access token
+    - personal_access_token: Alias for pat (for API compatibility)
     
     Optional:
     - max_retries: Maximum retries on rate limit (default: 3)
     """
     
-    organization: str = Field(
-        ...,
+    organization: Optional[str] = Field(
+        None,
         description="Azure DevOps organization name"
     )
-    project: str = Field(
-        ...,
+    project: Optional[str] = Field(
+        None,
         description="Project name"
     )
-    pat: str = Field(
-        ...,
+    pat: Optional[str] = Field(
+        None,
         description="Personal access token"
     )
     max_retries: int = Field(
@@ -221,6 +285,30 @@ class AzureDevOpsConfig(BaseModel):
         le=10,
         description="Maximum retries on rate limit (1-10)"
     )
+    
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_field_names(cls, data):
+        """Accept field name variants for compatibility with frontend form.
+        
+        Maps:
+        - 'personal_access_token' -> 'pat'
+        """
+        if isinstance(data, dict):
+            if 'personal_access_token' in data and 'pat' not in data:
+                data['pat'] = data.pop('personal_access_token')
+        return data
+    
+    @model_validator(mode='after')
+    def validate_required_fields(self):
+        """Ensure all required fields are present."""
+        if not self.organization:
+            raise ValueError('organization is required')
+        if not self.project:
+            raise ValueError('project is required')
+        if not self.pat:
+            raise ValueError('pat is required')
+        return self
 
 
 class GitLabConfig(BaseModel):
@@ -230,21 +318,22 @@ class GitLabConfig(BaseModel):
     - gitlab_url: GitLab instance URL
     - project_id: Project ID
     - private_token: Private access token
+    - access_token: Alias for private_token (for API compatibility)
     
     Optional:
     - max_retries: Maximum retries on rate limit (default: 3)
     """
     
-    gitlab_url: str = Field(
-        ...,
+    gitlab_url: Optional[str] = Field(
+        None,
         description="GitLab instance URL"
     )
-    project_id: str = Field(
-        ...,
+    project_id: Optional[str] = Field(
+        None,
         description="Project ID"
     )
-    private_token: str = Field(
-        ...,
+    private_token: Optional[str] = Field(
+        None,
         description="Private access token"
     )
     max_retries: int = Field(
@@ -254,15 +343,44 @@ class GitLabConfig(BaseModel):
         description="Maximum retries on rate limit (1-10)"
     )
     
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_field_names(cls, data):
+        """Accept field name variants for compatibility with frontend form.
+        
+        Maps:
+        - 'url' -> 'gitlab_url'
+        - 'access_token' -> 'private_token'
+        """
+        if isinstance(data, dict):
+            if 'url' in data and 'gitlab_url' not in data:
+                data['gitlab_url'] = data.pop('url')
+            if 'access_token' in data and 'private_token' not in data:
+                data['private_token'] = data.pop('access_token')
+        return data
+    
     @field_validator('gitlab_url')
     @classmethod
     def validate_gitlab_url(cls, v):
         """Ensure URL is properly formatted."""
+        if not v:
+            return v
         if not v.startswith(('http://', 'https://')):
             raise ValueError('gitlab_url must start with http:// or https://')
         if v.endswith('/'):
             return v[:-1]
         return v
+    
+    @model_validator(mode='after')
+    def validate_required_fields(self):
+        """Ensure all required fields are present."""
+        if not self.gitlab_url:
+            raise ValueError('gitlab_url is required')
+        if not self.project_id:
+            raise ValueError('project_id is required')
+        if not self.private_token:
+            raise ValueError('private_token is required')
+        return self
 
 
 class LinearConfig(BaseModel):

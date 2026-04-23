@@ -3,17 +3,23 @@ import pytest
 from unittest.mock import Mock, patch
 from jira import JIRAError
 import json
+from models.connector_config import validate_connector_config
+
+
+def normalize_jira_config(config: dict) -> dict:
+    """Normalize frontend field names to backend field names using Pydantic validation."""
+    return validate_connector_config('jira', config)
 
 
 def test_jira_401_unauthorized_returns_clear_message():
     """Jira 401 error should return actionable message about invalid credentials."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
         'api_token': 'wrong_token'
-    }, [])
+    }), [])
     
     with patch('jira.JIRA') as mock_jira:
         # Simulate 401 error from Jira
@@ -33,12 +39,12 @@ def test_jira_404_project_not_found_returns_clear_message():
     """Jira 404 error (project not found) should return actionable message."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
         'api_token': 'token',
         'project_key': 'NONEXIST'
-    }, [])
+    }), [])
     
     with patch('jira.JIRA') as mock_jira:
         mock_jira.side_effect = JIRAError(
@@ -56,11 +62,12 @@ def test_jira_403_forbidden_returns_clear_message():
     """Jira 403 error (permission denied) should return actionable message."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
-        'api_token': 'token'
-    }, [])
+        'api_token': 'token',
+        'project_key': 'TEST'
+    }), [])
     
     with patch('jira.JIRA') as mock_jira:
         mock_jira.side_effect = JIRAError(
@@ -79,11 +86,12 @@ def test_jira_connection_timeout_returns_clear_message():
     from connectors.jira import JiraConnector
     import socket
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://invalid.jira.url',
         'email': 'user@example.com',
-        'api_token': 'token'
-    }, [])
+        'api_token': 'token',
+        'project_key': 'TEST'
+    }), [])
     
     with patch('jira.JIRA') as mock_jira:
         mock_jira.side_effect = socket.timeout('Connection timed out')
@@ -98,11 +106,12 @@ def test_jira_json_parse_error_returns_clear_message():
     """JSON parsing error (malformed response) should suggest Jira URL or network issue."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
-        'api_token': 'token'
-    }, [])
+        'api_token': 'token',
+        'project_key': 'TEST'
+    }), [])
     
     with patch('jira.JIRA') as mock_jira:
         # Simulate JSON decode error (Expecting value: line 2 column 2)
@@ -118,11 +127,12 @@ def test_jira_500_server_error_returns_clear_message():
     """Jira 500 server error should suggest waiting and retrying."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
-        'api_token': 'token'
-    }, [])
+        'api_token': 'token',
+        'project_key': 'TEST'
+    }), [])
     
     with patch('jira.JIRA') as mock_jira:
         mock_jira.side_effect = JIRAError(
@@ -143,12 +153,12 @@ def test_fetch_items_handles_api_error_gracefully():
     from unittest.mock import MagicMock
     import requests
 
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
         'api_token': 'token',
         'project_key': 'TEST'
-    }, [{'display_name': 'To Do', 'stage': 'queue'}])
+    }), [{'display_name': 'To Do', 'stage': 'queue'}])
 
     with patch('connectors.jira.requests.get') as mock_get:
         mock_resp = MagicMock()
@@ -164,12 +174,12 @@ def test_fetch_items_uses_v3_api_endpoint():
     from connectors.jira import JiraConnector
     from unittest.mock import MagicMock
 
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
         'api_token': 'token',
         'project_key': 'TEST'
-    }, [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['Done']}])
+    }), [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['Done']}])
 
     with patch('connectors.jira.requests.get') as mock_get:
         mock_resp = MagicMock()
@@ -191,12 +201,12 @@ def test_fetch_items_raises_on_jira_error_messages_in_200_response():
     from connectors.jira import JiraConnector
     from unittest.mock import MagicMock
 
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
         'api_token': 'token',
         'project_key': 'TEST'
-    }, [])
+    }), [])
 
     with patch('connectors.jira.requests.get') as mock_get:
         mock_resp = MagicMock()
@@ -224,12 +234,12 @@ def test_fetch_items_parses_v3_issue_structure():
         {'display_name': 'In Progress', 'stage': 'start', 'source_statuses': ['in progress']},
         {'display_name': 'Done', 'stage': 'done', 'source_statuses': ['done']},
     ]
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
         'api_token': 'token',
         'project_key': 'TEST'
-    }, steps)
+    }), steps)
 
     v3_response = {
         "issues": [{
@@ -273,11 +283,12 @@ def test_jira_personal_access_token_auth():
     """JiraConnector should support Personal Access Token (Bearer) authentication."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'auth_type': 'personal_access_token',
-        'personal_access_token': 'pat_token_12345'
-    }, [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['done']}])
+        'personal_access_token': 'pat_token_12345',
+        'project_key': 'TEST'
+    }), [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['done']}])
     
     with patch('jira.JIRA') as mock_jira_class:
         # Mock the JIRA client and its session
@@ -305,13 +316,13 @@ def test_jira_api_token_auth_still_works():
     """JiraConnector should still support API Token (Basic Auth) authentication."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'auth_type': 'api_token',
         'email': 'user@example.com',
         'api_token': 'api_token_12345',
         'project_key': 'TEST'
-    }, [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['done']}])
+    }), [{'display_name': 'Done', 'stage': 'done', 'source_statuses': ['done']}])
     
     with patch('jira.JIRA') as mock_jira_class:
         # Mock the JIRA client and its session
@@ -336,11 +347,12 @@ def test_jira_pat_test_connection():
     """test_connection should work with PAT authentication."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'auth_type': 'personal_access_token',
-        'personal_access_token': 'pat_token'
-    }, [])
+        'personal_access_token': 'pat_token',
+        'project_key': 'TEST'
+    }), [])
     
     with patch('jira.JIRA') as mock_jira_class:
         mock_jira = Mock()
@@ -361,12 +373,12 @@ def test_jira_429_rate_limit_returns_helpful_message():
     """Jira 429 rate limit error should return helpful message about request delay."""
     from connectors.jira import JiraConnector
     
-    connector = JiraConnector({
+    connector = JiraConnector(normalize_jira_config({
         'url': 'https://jira.example.com',
         'email': 'user@example.com',
         'api_token': 'token',
         'project_key': 'TEST'
-    }, [])
+    }), [])
     
     with patch('jira.JIRA') as mock_jira:
         # Simulate 429 rate limit error from Jira

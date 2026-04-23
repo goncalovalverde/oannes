@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from database import get_db
 from models.project import Project, WorkflowStep
+from models.connector_config import validate_connector_config
 
 router = APIRouter()
 
@@ -57,6 +58,16 @@ def list_projects(db: Session = Depends(get_db)):
 
 @router.post("/", response_model=ProjectOut)
 def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
+    # Validate config before saving and normalize field names
+    if data.config:
+        try:
+            data.config = validate_connector_config(data.platform, data.config)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid {data.platform} configuration: {str(e)}"
+            )
+    
     project = Project(
         name=data.name,
         platform=data.platform,
@@ -84,12 +95,21 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    
     if data.name is not None:
         project.name = data.name
     if data.platform is not None:
         project.platform = data.platform
     if data.config is not None:
-        project.config = data.config
+        # Validate config before saving and normalize field names
+        try:
+            validated_config = validate_connector_config(data.platform or project.platform, data.config)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid {data.platform or project.platform} configuration: {str(e)}"
+            )
+        project.config = validated_config
     workflow_changed = data.workflow_steps is not None
     if workflow_changed:
         db.query(WorkflowStep).filter(WorkflowStep.project_id == project_id).delete()

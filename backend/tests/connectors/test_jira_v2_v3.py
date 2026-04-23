@@ -3,6 +3,16 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from jira import JIRAError
 import pandas as pd
+from models.connector_config import validate_connector_config
+
+
+def normalize_jira_config(config: dict) -> dict:
+    """Normalize frontend field names to backend field names using Pydantic validation.
+    
+    This ensures tests use the same normalized config that production code receives
+    from validate_connector_config().
+    """
+    return validate_connector_config('jira', config)
 
 
 class TestJiraApiVersionResolution:
@@ -12,12 +22,12 @@ class TestJiraApiVersionResolution:
         """Auto-detect should return v3 when v3 endpoint succeeds."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token',
             'jira_api_version': 'auto'
-        }, [])
+        }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira = Mock()
@@ -39,12 +49,12 @@ class TestJiraApiVersionResolution:
         """Auto-detect should fallback to v2 when v3 returns 404."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token',
             'jira_api_version': 'auto'
-        }, [])
+        }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira = Mock()
@@ -63,12 +73,12 @@ class TestJiraApiVersionResolution:
         """Explicitly set v3 should skip auto-detect."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token',
             'jira_api_version': 'v3'
-        }, [])
+        }), [])
 
         result = connector._resolve_api_version()
 
@@ -78,12 +88,12 @@ class TestJiraApiVersionResolution:
         """Explicitly set v2 should skip auto-detect."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token',
             'jira_api_version': 'v2'
-        }, [])
+        }), [])
 
         result = connector._resolve_api_version()
 
@@ -93,12 +103,12 @@ class TestJiraApiVersionResolution:
         """Auto-detect should re-raise auth errors (401/403), not assume v2."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'bad_token',
             'jira_api_version': 'auto'
-        }, [])
+        }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira_class.side_effect = JIRAError(status_code=401, text='Unauthorized')
@@ -112,12 +122,12 @@ class TestJiraApiVersionResolution:
         """Default jira_api_version should be 'auto' when not specified."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token'
             # No jira_api_version specified
-        }, [])
+        }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira = Mock()
@@ -141,11 +151,11 @@ class TestJiraV2Search:
         """v2 search should call /rest/api/2/search and return issues."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token'
-        }, [])
+        }), [])
 
         v2_response = {
             "issues": [
@@ -184,11 +194,11 @@ class TestJiraV2Search:
         """v2 search should pass startAt and maxResults params."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token'
-        }, [])
+        }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira = Mock()
@@ -215,13 +225,13 @@ class TestJiraFetchItemsVersionSelection:
         """fetch_items should resolve API version once and reuse for all batches."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token',
             'project_key': 'TEST',
             'jira_api_version': 'v3'
-        }, [
+        }), [
             {'display_name': 'Done', 'stage': 'done', 'source_statuses': ['Done']}
         ])
 
@@ -264,13 +274,13 @@ class TestJiraFetchItemsVersionSelection:
         """fetch_items should use v2 API when explicitly set."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'email': 'user@example.com',
             'api_token': 'token',
             'project_key': 'TEST',
             'jira_api_version': 'v2'
-        }, [
+        }), [
             {'display_name': 'Done', 'stage': 'done', 'source_statuses': ['Done']}
         ])
 
@@ -304,13 +314,13 @@ class TestJiraTestConnectionVersionDetection:
         """test_connection should return api_version_detected=v3 when v3 works."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'auth_type': 'api_token',
             'email': 'user@example.com',
             'api_token': 'token',
             'jira_api_version': 'auto'
-        }, [])
+        }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira = Mock()
@@ -343,13 +353,13 @@ class TestJiraTestConnectionVersionDetection:
         """test_connection should return api_version_detected=v2 when forced v2."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'auth_type': 'api_token',
             'email': 'user@example.com',
             'api_token': 'token',
             'jira_api_version': 'v2'
-        }, [])
+        }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira = Mock()
@@ -368,13 +378,13 @@ class TestJiraTestConnectionVersionDetection:
         """test_connection failure should include api_version_detected=None."""
         from connectors.jira import JiraConnector
 
-        connector = JiraConnector({
+        connector = JiraConnector(normalize_jira_config({
             'url': 'https://jira.example.com',
             'auth_type': 'api_token',
             'email': 'bad@example.com',
             'api_token': 'bad_token',
             'jira_api_version': 'auto'
-        }, [])
+        }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira_class.side_effect = JIRAError(status_code=401, text='Unauthorized')

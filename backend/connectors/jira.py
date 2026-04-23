@@ -144,31 +144,53 @@ class JiraConnector(BaseConnector):
                 # For PAT, create JIRA client without auth, then set Bearer token in session
                 logger.debug(f"[Jira Client] Creating JIRA client for PAT with Bearer token")
                 
+                # Get the token first, before creating the client
+                pat = self.config.get("personal_access_token", "")
+                if not pat:
+                    logger.error("[Jira Client] No personal_access_token found in config!")
+                    raise ValueError("personal_access_token is required for PAT authentication")
+                
                 # Create JIRA client without auth validation
                 self._jira = JIRA(
-                    server=self.config["url"],
+                    server=self.config["jira_url"],
                     options={"agile_rest_path": "agile"},
                     validate=False,  # Don't validate server on init
                     get_server_info=False  # Don't fetch server info on init
                 )
                 
                 # Set Bearer token in the session
-                pat = self.config.get("personal_access_token", "")
                 if hasattr(self._jira, '_session'):
                     self._jira._session.headers.update({
                         'Authorization': f'Bearer {pat}'
                     })
-                    logger.debug("[Jira Client] Set Bearer token in session headers")
+                    logger.debug(f"[Jira Client] Set Bearer token in session headers (token length: {len(pat)})")
+                    logger.debug(f"[Jira Client] Session headers: {dict(self._jira._session.headers)}")
                 else:
-                    logger.warning("[Jira Client] Could not find _session attribute")
+                    logger.warning("[Jira Client] Could not find _session attribute, attempting to set headers directly")
+                    # Try alternative approach - might not work but worth trying
+                    try:
+                        self._jira._session = requests.Session()
+                        self._jira._session.headers.update({
+                            'Authorization': f'Bearer {pat}'
+                        })
+                        logger.debug("[Jira Client] Created new session and set Bearer token")
+                    except Exception as e:
+                        logger.error(f"[Jira Client] Failed to set Bearer token: {e}")
+                        raise
             else:
                 # API token auth
-                email = self.config.get("email", "")
+                username = self.config.get("username", "")
                 token = self.config.get("api_token", "")
-                logger.debug(f"[Jira Client] Creating JIRA client with API token (email: {email}, token length: {len(token)})")
+                if not username:
+                    logger.error("[Jira Client] No username found in config for API token auth!")
+                    raise ValueError("username is required for API token authentication")
+                if not token:
+                    logger.error("[Jira Client] No api_token found in config!")
+                    raise ValueError("api_token is required for API token authentication")
+                logger.debug(f"[Jira Client] Creating JIRA client with API token (username: {username}, token length: {len(token)})")
                 self._jira = JIRA(
-                    server=self.config["url"],
-                    basic_auth=(email, token),
+                    server=self.config["jira_url"],
+                    basic_auth=(username, token),
                     validate=False,  # Skip server validation
                     get_server_info=False  # Don't fetch server info on init
                 )
@@ -180,7 +202,7 @@ class JiraConnector(BaseConnector):
         Returns:
             'v3' or 'v2'
         """
-        configured_version = self.config.get("jira_api_version", "auto")
+        configured_version = self.config.get("api_version", "auto")
         logger.debug(f"[Jira API] Configured version: {configured_version}")
         
         # If explicitly set to v2 or v3, use that
@@ -192,7 +214,7 @@ class JiraConnector(BaseConnector):
         logger.debug("[Jira API] Auto-detecting: attempting v3 first")
         try:
             # Test v3 with a simple endpoint that requires no project knowledge
-            url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
+            url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/myself"
             jira = self._get_client()
             # Note: ResilientSession handles timeout internally, don't override it
             resp = jira._session.get(url)
@@ -300,7 +322,7 @@ class JiraConnector(BaseConnector):
         
         Normalizes v2 response to match v3 structure (used by fetch_items).
         """
-        url = f"{self.config['url'].rstrip('/')}/rest/api/2/search"
+        url = f"{self.config['jira_url'].rstrip('/')}/rest/api/2/search"
         params = {
             "jql": jql,
             "startAt": start,
@@ -323,6 +345,13 @@ class JiraConnector(BaseConnector):
             logger.debug(f"[Jira Search v2] <<< RESPONSE")
             logger.debug(f"[Jira Search v2]     Status: {resp.status_code}")
             logger.debug(f"[Jira Search v2]     Issues Count: {len(data.get('issues', []))}")
+            logger.debug(f"[Jira Search v2]     Total: {data.get('total')}")
+            logger.debug(f"[Jira Search v2]     StartAt: {data.get('startAt')}")
+            logger.debug(f"[Jira Search v2]     MaxResults: {data.get('maxResults')}")
+            
+            # If no issues found, log full response for debugging
+            if not data.get('issues'):
+                logger.warning(f"[Jira Search v2] No issues found. Full response: {data}")
             
             # Surface any Jira application-level errors embedded in 200 response
             if "errorMessages" in data and data["errorMessages"]:
@@ -343,7 +372,7 @@ class JiraConnector(BaseConnector):
         Uses the jira client's ResilientSession to get automatic retry logic
         for rate limiting (429) and other transient errors.
         """
-        url = f"{self.config['url'].rstrip('/')}/rest/api/3/search/jql"
+        url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/search/jql"
         params = {
             "jql": jql,
             "startAt": start,
@@ -359,7 +388,8 @@ class JiraConnector(BaseConnector):
         logger.debug(f"[Jira Search] >>> REQUEST")
         logger.debug(f"[Jira Search]     Method: GET")
         logger.debug(f"[Jira Search]     URL: {url}")
-        logger.debug(f"[Jira Search]     Params: jql={jql[:100]}..." if len(jql) > 100 else f"[Jira Search]     Params: jql={jql}")
+        jql_log = f"jql={jql[:100]}..." if jql and len(jql) > 100 else f"jql={jql}"
+        logger.debug(f"[Jira Search]     Params: {jql_log}")
         logger.debug(f"[Jira Search]     Params: startAt={start}, maxResults={batch}")
         logger.debug(f"[Jira Search]     Headers: {dict(jira._session.headers)}")
         
@@ -395,6 +425,10 @@ class JiraConnector(BaseConnector):
         if "errorMessages" in data and data["errorMessages"]:
             logger.error(f"[Jira Search] Jira application error: {data['errorMessages']}")
             raise JIRAError(status_code=400, text="; ".join(data["errorMessages"]))
+        
+        # If no issues found, log full response for debugging
+        if not data.get('issues'):
+            logger.warning(f"[Jira Search] No issues found. Full response: {data}")
 
         return data
 
@@ -433,11 +467,11 @@ class JiraConnector(BaseConnector):
 
     def test_connection(self) -> dict:
         logger.info(f"[Jira Test] Starting connection test with auth_type: {self.config.get('auth_type')}")
-        logger.debug(f"[Jira Test] URL: {self.config.get('url')}")
+        logger.debug(f"[Jira Test] URL: {self.config.get('jira_url')}")
         try:
             # Resolve API version first
             api_version = self._resolve_api_version()
-            configured_version = self.config.get("jira_api_version", "auto")
+            configured_version = self.config.get("api_version", "auto")
             logger.info(f"[Jira Test] Using API v{api_version} (configured: {configured_version})")
             
             # Use appropriate endpoints based on API version
@@ -479,7 +513,7 @@ class JiraConnector(BaseConnector):
             
             try:
                 # Test myself endpoint
-                url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
+                url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/myself"
                 logger.debug(f"[Jira Test v3] >>> REQUEST (myself endpoint)")
                 
                 resp = jira._session.get(url)
@@ -488,7 +522,7 @@ class JiraConnector(BaseConnector):
                 logger.info(f"[Jira Test v3] ✅ Authenticated as: {user.get('displayName', 'Unknown')}")
                 
                 # Now fetch projects with same auth method
-                url = f"{self.config['url'].rstrip('/')}/rest/api/3/projects"
+                url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/projects"
                 logger.debug(f"[Jira Test v3] >>> REQUEST (projects endpoint)")
                 
                 resp = jira._session.get(url)
@@ -518,7 +552,7 @@ class JiraConnector(BaseConnector):
             
             try:
                 # Test myself endpoint
-                url = f"{self.config['url'].rstrip('/')}/rest/api/3/myself"
+                url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/myself"
                 logger.debug(f"[Jira Test v3] >>> REQUEST (myself endpoint)")
                 
                 resp = jira._session.get(url)
@@ -527,7 +561,7 @@ class JiraConnector(BaseConnector):
                 logger.info(f"[Jira Test v3] ✅ Authenticated as: {user.get('displayName', 'Unknown')}")
                 
                 # Now fetch projects with v3 API
-                url = f"{self.config['url'].rstrip('/')}/rest/api/3/projects"
+                url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/projects"
                 logger.debug(f"[Jira Test v3] >>> REQUEST (projects endpoint)")
                 
                 resp = jira._session.get(url)
@@ -585,7 +619,16 @@ class JiraConnector(BaseConnector):
 
     def fetch_items(self) -> pd.DataFrame:
         project_key = self.config.get("project_key", "")
-        base_jql = self.config.get("jql", f"project = {project_key} ORDER BY updated DESC")
+        base_jql = self.config.get("jql")
+        
+        # If no custom JQL provided, generate from project_key
+        if not base_jql:
+            if not project_key:
+                raise ValueError("Either 'project_key' or custom 'jql' must be configured for Jira connector")
+            base_jql = f"project = {project_key} ORDER BY updated DESC"
+        
+        logger.info(f"[Jira Fetch] Project Key: {project_key}")
+        logger.info(f"[Jira Fetch] Base JQL: {base_jql}")
         
         # For incremental syncs, add updated timestamp filter
         jql = base_jql
@@ -597,15 +640,19 @@ class JiraConnector(BaseConnector):
             
             # Check if JQL has ORDER BY clause
             if "ORDER BY" in base_jql.upper():
-                # Insert the filter before ORDER BY
-                parts = base_jql.upper().split("ORDER BY")
-                jql = parts[0].rstrip() + f" AND {since_filter} ORDER BY " + parts[1].strip()
+                # Insert the filter before ORDER BY (split using uppercase check, but reconstruct with original case)
+                order_by_pos = base_jql.upper().find("ORDER BY")
+                before_order = base_jql[:order_by_pos].rstrip()
+                order_by_part = base_jql[order_by_pos:]  # Keep original case
+                jql = f"{before_order} AND {since_filter} {order_by_part}"
             else:
                 # Just append if no ORDER BY
                 jql = f"{base_jql} AND {since_filter}"
             logger.info(f"[Jira Fetch] Incremental sync since {since_str}")
+            logger.info(f"[Jira Fetch] Final JQL: {jql}")
         else:
             logger.info(f"[Jira Fetch] Full sync (no previous sync found)")
+            logger.info(f"[Jira Fetch] Final JQL: {jql}")
 
         status_map = self._build_status_map()
         step_names = [s["display_name"] for s in self.workflow_steps]
@@ -614,7 +661,7 @@ class JiraConnector(BaseConnector):
         api_version = self._resolve_api_version()
         logger.info(f"[Jira Fetch] Using API v{api_version} for data fetch")
         
-        configured_version = self.config.get("jira_api_version", "auto")
+        configured_version = self.config.get("api_version", "auto")
         
         # Try the selected API version, fallback to v2 if v3 fails and auto-detect was used
         try:

@@ -112,7 +112,14 @@ class SyncService:
         ]
         
         # Pass last_synced_at as 'since' for incremental syncing
-        connector = get_connector(project.platform, project.config, steps, since=project.last_synced_at)
+        try:
+            connector = get_connector(project.platform, project.config, steps, since=project.last_synced_at)
+        except ValueError as e:
+            # Provide helpful error message for configuration issues
+            raise ValueError(
+                f"Project '{project.name}' has invalid {project.platform} configuration. "
+                f"Please update the project configuration. Details: {str(e)}"
+            ) from e
         return connector.fetch_items()
 
     def _store_items(self, project_id: int, df: pd.DataFrame) -> None:
