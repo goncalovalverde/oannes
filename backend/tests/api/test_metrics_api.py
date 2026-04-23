@@ -530,34 +530,34 @@ class TestQualityRate:
     """Integration tests for GET /api/metrics/{id}/quality-rate."""
 
     def test_quality_rate_returns_list(self, client, db):
-        """Endpoint returns a list under 'data' key."""
+        """Endpoint returns a list under 'data.data' key in ResponseEnvelope format."""
         pid = _create_project(client)
         _seed_items(db, pid, n=10)
         r = client.get(f"/api/metrics/{pid}/quality-rate")
         assert r.status_code == 200
-        assert "data" in r.json()
-        assert isinstance(r.json()["data"], list)
+        response = r.json()
+        assert "data" in response
+        assert "data" in response["data"]
+        assert isinstance(response["data"]["data"], list)
 
     def test_quality_rate_each_entry_has_required_fields(self, client, db):
-        """Each entry must have week, total, bugs, quality_pct."""
+        """Each entry must have date and value."""
         pid = _create_project(client)
         _seed_items(db, pid, n=10)
         r = client.get(f"/api/metrics/{pid}/quality-rate")
         assert r.status_code == 200
-        for entry in r.json()["data"]:
-            assert "week"        in entry, f"Missing 'week' in {entry}"
-            assert "total"       in entry, f"Missing 'total' in {entry}"
-            assert "bugs"        in entry, f"Missing 'bugs' in {entry}"
-            assert "quality_pct" in entry, f"Missing 'quality_pct' in {entry}"
+        for entry in r.json()["data"]["data"]:
+            assert "date"  in entry, f"Missing 'date' in {entry}"
+            assert "value" in entry, f"Missing 'value' in {entry}"
 
     def test_quality_pct_between_0_and_100(self, client, db):
-        """quality_pct must be in [0, 100] for every row."""
+        """Quality value must be in [0, 100] for every row."""
         pid = _create_project(client)
         _seed_items(db, pid, n=20)
         r = client.get(f"/api/metrics/{pid}/quality-rate")
         assert r.status_code == 200
-        for entry in r.json()["data"]:
-            assert 0.0 <= entry["quality_pct"] <= 100.0
+        for entry in r.json()["data"]["data"]:
+            assert 0.0 <= entry["value"] <= 100.0
 
     def test_quality_rate_unknown_project_returns_404(self, client):
         """Non-existent project must return 404."""
@@ -569,16 +569,16 @@ class TestQualityRate:
         pid = _create_project(client)
         r = client.get(f"/api/metrics/{pid}/quality-rate")
         assert r.status_code == 200
-        assert r.json()["data"] == []
+        assert r.json()["data"]["data"] == []
 
     def test_bugs_reduce_quality_pct(self, client, db):
-        """Seeded dataset (50% Bugs by _seed_items) must have quality_pct < 100."""
+        """Seeded dataset (50% Bugs by _seed_items) must have quality values < 100."""
         pid = _create_project(client)
         _seed_items(db, pid, n=20)
         r = client.get(f"/api/metrics/{pid}/quality-rate")
         assert r.status_code == 200
-        non_zero = [e for e in r.json()["data"] if e["total"] > 0]
-        assert any(e["quality_pct"] < 100.0 for e in non_zero), \
+        non_zero = [e for e in r.json()["data"]["data"] if e["value"] > 0]
+        assert any(e["value"] < 100.0 for e in non_zero), \
             "Expected at least one week with bugs in a 50/50 Bug/Story dataset"
 
     def test_quality_rate_weeks_param_respected(self, client, db):
@@ -589,7 +589,7 @@ class TestQualityRate:
         r12 = client.get(f"/api/metrics/{pid}/quality-rate?weeks=12")
         assert r4.status_code == 200
         assert r12.status_code == 200
-        assert len(r4.json()["data"]) <= len(r12.json()["data"])
+        assert len(r4.json()["data"]["data"]) <= len(r12.json()["data"]["data"])
 
 
 class TestGranularityParam:
