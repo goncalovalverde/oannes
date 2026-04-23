@@ -122,6 +122,10 @@ class MetricStats(BaseModel):
         None,
         description="75th percentile"
     )
+    p85: Optional[float] = Field(
+        None,
+        description="85th percentile"
+    )
     p95: Optional[float] = Field(
         None,
         description="95th percentile"

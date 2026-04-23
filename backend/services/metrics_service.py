@@ -478,19 +478,17 @@ class MetricsService:
         # Check if start column exists
         if start_col not in df.columns:
             stats = cycle_time_stats(df)
-            p75 = stats.get("p75")
+            p85 = stats.get("p85")
             return MetricResponse(
                 data=[],
-                stats=MetricStats(avg=p75 or 0, p75=p75),
+                stats=MetricStats(avg=p85 or 0, p85=p85),
                 unit="days",
                 period="total"
             )
         
-        # Get p75 for threshold (using p75 since MetricStats doesn't have p85)
+        # Get p85 for threshold
         stats = cycle_time_stats(df)
-        p75 = stats.get("p75")
-        # Note: original code used p85, but MetricStats doesn't have p85 field
-        p85_threshold = stats.get("p85")  # Store for is_over_85th check
+        p85_threshold = stats.get("p85")  # Threshold for is_over_85th check
         
         # Find items in progress (started but not done)
         in_progress = df[df[start_col].notna()].copy()
@@ -530,7 +528,7 @@ class MetricsService:
         
         return MetricResponse(
             data=result,
-            stats=MetricStats(avg=round(avg_age, 1), p75=p75),
+            stats=MetricStats(avg=round(avg_age, 1), p85=p85_threshold),
             unit="days",
             period="total"
         )
