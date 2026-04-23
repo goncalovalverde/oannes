@@ -42,6 +42,7 @@ def get_items_df(project_id: int, weeks: int, item_type: str, db: Session) -> pd
         if item.transitions:
             status_transitions = [
                 {
+                    "from_status": t.from_status,
                     "to_status": t.to_status,
                     "transitioned_at": t.transitioned_at,
                 }

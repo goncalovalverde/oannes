@@ -188,7 +188,7 @@ class SyncService:
     def _store_transitions(self, item_id: int, transitions_list: list) -> None:
         """Store transitions in the item_transitions table.
         
-        Transitions are expected to be a list of dicts with 'to_status' and 'transitioned_at' keys.
+        Transitions are expected to be a list of dicts with 'from_status', 'to_status' and 'transitioned_at' keys.
         """
         if not transitions_list:
             return
@@ -201,6 +201,7 @@ class SyncService:
         # Insert new transitions
         for transition in transitions_list:
             if isinstance(transition, dict):
+                from_status = transition.get("from_status")
                 to_status = transition.get("to_status")
                 transitioned_at = transition.get("transitioned_at")
                 
@@ -215,6 +216,7 @@ class SyncService:
                     
                     db.add(ItemTransition(
                         item_id=item_id,
+                        from_status=str(from_status) if from_status else None,
                         to_status=str(to_status),
                         transitioned_at=transitioned_at
                     ))
@@ -257,6 +259,7 @@ class SyncService:
             
             transitions_list = [
                 {
+                    "from_status": t.from_status,
                     "to_status": t.to_status,
                     "transitioned_at": t.transitioned_at,
                 }

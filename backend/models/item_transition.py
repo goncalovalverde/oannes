@@ -12,6 +12,8 @@ class ItemTransition(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     item_id = Column(Integer, ForeignKey("cached_items.id", ondelete="CASCADE"), nullable=False)
+    from_status = Column(String(255), nullable=True)
     to_status = Column(String(255), nullable=False)
     transitioned_at = Column(DateTime, nullable=False)
+
 

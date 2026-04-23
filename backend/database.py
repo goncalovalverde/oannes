@@ -58,6 +58,14 @@ def migrate_schema() -> None:
             db.commit()
             logger.info("Schema migration: added status_transitions column to cached_items")
         
+        # Check and add from_status column to item_transitions
+        result = db.execute(text("PRAGMA table_info(item_transitions)"))
+        columns = {row[1] for row in result}
+        if "from_status" not in columns:
+            db.execute(text("ALTER TABLE item_transitions ADD COLUMN from_status VARCHAR(255)"))
+            db.commit()
+            logger.info("Schema migration: added from_status column to item_transitions")
+        
         # Check and add rate limiting columns to projects
         result = db.execute(text("PRAGMA table_info(projects)"))
         columns = {row[1] for row in result}
