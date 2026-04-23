@@ -18,7 +18,7 @@ export const useFilterStore = create<FilterState>()(
   persist(
     (set) => ({
       activeProjectId: null,
-      weeks: 12,
+      weeks: 520,
       itemType: 'all',
       granularity: 'week',
       setActiveProject: (id) => set({ activeProjectId: id, itemType: 'all' }),
