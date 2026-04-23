@@ -69,12 +69,13 @@ export default function Dashboard() {
     net: item.by_type?.net ?? item.value ?? 0,
   }))
 
-  // Transform quality data: { date, value, by_type } → { week, total, bugs, quality_pct }
+  // Transform quality data: endpoint returns { date, value, by_type: {total, bugs} }
+  // Convert to QualityPoint format: { week, total, bugs, quality_pct }
   const transformedQuality = qualityData.map((item: any) => ({
-    week: item.date,
-    total: 100,
-    bugs: 0,
-    quality_pct: item.value,
+    week: item.date || item.week,
+    total: item.by_type?.total ?? item.total ?? 0,
+    bugs: item.by_type?.bugs ?? item.bugs ?? 0,
+    quality_pct: item.value ?? item.quality_pct ?? 0,
   }))
 
   // Transform cycleTime data: { date, value, by_type } → { period, avg_cycle_time }

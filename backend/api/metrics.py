@@ -792,14 +792,17 @@ def get_quality_rate(
 
     result_df["week"] = result_df["week"].dt.strftime("%Y-%m-%d")
     
-    # Convert to MetricDataPoint format: { date, value, by_type }
+    # Convert DataFrame to MetricDataPoint format, using by_type to include total and bugs
     data = []
     avg_quality = 0
     for _, row in result_df.iterrows():
         data.append(MetricDataPoint(
             date=row["week"],
             value=float(row.get("quality_pct", 0)),
-            by_type=None
+            by_type={
+                "total": int(row.get("total", 0)),
+                "bugs": int(row.get("bugs", 0)),
+            }
         ))
         avg_quality += float(row.get("quality_pct", 0))
     
