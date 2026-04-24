@@ -16,11 +16,11 @@ from typing import Optional
 
 import pandas as pd
 import numpy as np
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, selectinload
 
 from models.project import Project
 from models.sync_job import CachedItem
-from models.api_response import MetricResponse, MetricStats, MetricDataPoint
+from models.api_response import MetricResponse, MetricStats, MetricDataPoint, MetricsSummary
 from models.item_transition import ItemTransition
 from calculator.flow import (
     quality_rate as calc_quality_rate,
@@ -80,7 +80,7 @@ class MetricsService:
             ProjectNotFound: If project doesn't exist
         """
         project = self._get_project(project_id)
-        df = self._get_items_df(project_id, weeks, item_type)
+        df = self.get_items_df(project_id, weeks, item_type)
         
         if df.empty:
             return MetricResponse(data=[], stats=MetricStats(avg=0), unit="%", period=granularity)
@@ -129,7 +129,7 @@ class MetricsService:
             ProjectNotFound: If project doesn't exist
         """
         project = self._get_project(project_id)
-        df = self._get_items_df(project_id, weeks, item_type)
+        df = self.get_items_df(project_id, weeks, item_type)
         
         if df.empty:
             return MetricResponse(data=[], stats=MetricStats(avg=0, trend_pct=0), unit="items", period=granularity)
@@ -194,7 +194,7 @@ class MetricsService:
             ProjectNotFound: If project doesn't exist
         """
         project = self._get_project(project_id)
-        df = self._get_items_df(project_id, weeks, item_type)
+        df = self.get_items_df(project_id, weeks, item_type)
         
         if df.empty or "cycle_time_days" not in df.columns:
             return MetricResponse(
@@ -253,7 +253,7 @@ class MetricsService:
             ProjectNotFound: If project doesn't exist
         """
         project = self._get_project(project_id)
-        df = self._get_items_df(project_id, weeks * 2, item_type)  # Get 2x window for accuracy
+        df = self.get_items_df(project_id, weeks * 2, item_type)  # Get 2x window for accuracy
         
         if df.empty:
             return MetricResponse(data=[], stats=MetricStats(avg=0), unit="items", period="daily")
@@ -309,7 +309,7 @@ class MetricsService:
             ProjectNotFound: If project doesn't exist
         """
         project = self._get_project(project_id)
-        df = self._get_items_df(project_id, weeks, item_type)
+        df = self.get_items_df(project_id, weeks, item_type)
         
         if df.empty or "lead_time_days" not in df.columns:
             return MetricResponse(
@@ -368,7 +368,7 @@ class MetricsService:
             ProjectNotFound: If project doesn't exist
         """
         project = self._get_project(project_id)
-        df = self._get_items_df(project_id, weeks, item_type)
+        df = self.get_items_df(project_id, weeks, item_type)
         
         if df.empty:
             return MetricResponse(
@@ -449,7 +449,7 @@ class MetricsService:
         """
         project = self._get_project(project_id)
         # Load with weeks*4 to capture old items still in flight
-        df = self._get_items_df(project_id, weeks * 4, item_type)
+        df = self.get_items_df(project_id, weeks * 4, item_type)
         
         if df.empty:
             return MetricResponse(
@@ -558,7 +558,7 @@ class MetricsService:
             ProjectNotFound: If project doesn't exist
         """
         project = self._get_project(project_id)
-        df = self._get_items_df(project_id, weeks, item_type)
+        df = self.get_items_df(project_id, weeks, item_type)
         
         if df.empty:
             return MetricResponse(data=[], stats=MetricStats(avg=0), unit="%", period="total")
@@ -606,7 +606,7 @@ class MetricsService:
             ProjectNotFound: If project doesn't exist
         """
         project = self._get_project(project_id)
-        df = self._get_items_df(project_id, weeks, item_type)
+        df = self.get_items_df(project_id, weeks, item_type)
         
         if df.empty:
             return MetricResponse(data=[], stats=MetricStats(avg=0), unit="items", period=granularity)
@@ -655,42 +655,157 @@ class MetricsService:
             unit="items",
             period=granularity
         )
-    
+
+    # ------------------------------------------------------------------
+    # Dashboard Summary
+    # ------------------------------------------------------------------
+
+    def summary(self, project_id: int, weeks: int, item_type: str = "all") -> MetricsSummary:
+        """Return a dashboard summary using a single DB query.
+
+        Loads items once with a wide window (weeks*4) to capture open/aging items
+        that pre-date the requested period, then derives a narrow slice for
+        time-bounded metrics (throughput, CT, LT, flow efficiency).
+
+        Args:
+            project_id: Project ID
+            weeks: Time window for bounded metrics (throughput, CT, LT)
+            item_type: Filter by item type ('all' for no filter)
+
+        Raises:
+            ProjectNotFound: If project doesn't exist
+        """
+        from calculator.flow import (
+            throughput as calc_throughput,
+            cycle_time_stats,
+            lead_time_stats,
+            flow_efficiency as calc_flow_efficiency,
+        )
+
+        project = self._get_project(project_id)
+
+        steps = sorted(project.workflow_steps, key=lambda s: s.position)
+        done_steps = [s for s in steps if s.stage == "done"]
+        in_flight_steps = [s for s in steps if s.stage == "in_flight"]
+        done_col = done_steps[-1].display_name if done_steps else None
+        steps_list = [
+            {"display_name": s.display_name, "stage": s.stage,
+             "position": s.position, "source_statuses": s.source_statuses or []}
+            for s in steps
+        ]
+
+        # One DB query — wide window covers all open/aging items
+        df_wide = self.get_items_df(project_id, weeks * 4, item_type)
+
+        # Narrow slice for time-bounded metrics
+        if not df_wide.empty and "created_at" in df_wide.columns:
+            cutoff = pd.Timestamp(_utcnow()) - pd.Timedelta(weeks=weeks)
+            df = df_wide[df_wide["created_at"] >= cutoff].copy()
+        else:
+            df = df_wide
+
+        item_types: list[str] = (
+            sorted(df_wide["item_type"].dropna().unique().tolist()) if not df_wide.empty else []
+        )
+
+        # Throughput (narrow window)
+        throughput_avg, throughput_trend_pct = 0.0, 0.0
+        if not df.empty and done_col and done_col in df.columns:
+            tp_df = calc_throughput(df, done_col=done_col, weeks=weeks)
+            if not tp_df.empty:
+                totals = [int(r.get("Total", 0)) for _, r in tp_df.iterrows()]
+                throughput_avg = float(np.mean(totals)) if totals else 0.0
+                half = len(totals) // 2
+                if half > 0 and np.mean(totals[:half]) > 0:
+                    throughput_trend_pct = float(
+                        (np.mean(totals[half:]) - np.mean(totals[:half]))
+                        / np.mean(totals[:half]) * 100
+                    )
+
+        # Cycle time & lead time percentiles (narrow window)
+        ct_stats = cycle_time_stats(df) if not df.empty else {}
+        lt_stats = lead_time_stats(df) if not df.empty else {}
+
+        # Current WIP (wide frame: captures items that started before the narrow cutoff)
+        current_wip = 0
+        if not df_wide.empty and in_flight_steps and done_col:
+            start_col = in_flight_steps[0].display_name
+            if start_col in df_wide.columns and done_col in df_wide.columns:
+                current_wip = int(
+                    (df_wide[start_col].notna() & df_wide[done_col].isna()).sum()
+                )
+
+        # Flow efficiency (narrow window)
+        fe = calc_flow_efficiency(df, steps_list) if (not df.empty and steps_list) else 0.0
+
+        # Aging WIP alerts (wide frame: open items over p85 CT threshold)
+        aging_wip_alerts = 0
+        p85 = ct_stats.get("p85")
+        if not df_wide.empty and in_flight_steps and done_col and p85 is not None:
+            start_col = in_flight_steps[0].display_name
+            if start_col in df_wide.columns and done_col in df_wide.columns:
+                open_items = df_wide[df_wide[start_col].notna() & df_wide[done_col].isna()]
+                if not open_items.empty:
+                    now_ts = pd.Timestamp(_utcnow())
+                    ages = open_items[start_col].apply(
+                        lambda t: (now_ts - t).days if pd.notna(t) else 0
+                    ).astype("int64")
+                    aging_wip_alerts = int((ages > p85).sum())
+
+        return MetricsSummary(
+            throughput_avg=round(throughput_avg, 1),
+            throughput_trend_pct=round(throughput_trend_pct, 1),
+            cycle_time_avg=ct_stats.get("mean"),
+            cycle_time_50th=ct_stats.get("p50"),
+            cycle_time_85th=ct_stats.get("p85"),
+            cycle_time_95th=ct_stats.get("p95"),
+            lead_time_85th=lt_stats.get("p85"),
+            current_wip=current_wip,
+            flow_efficiency=round(fe, 4),
+            aging_wip_alerts=aging_wip_alerts,
+            item_types=item_types,
+        )
+
     # ------------------------------------------------------------------
     # Private helpers for data retrieval
     # ------------------------------------------------------------------
-    
+
     def _get_project(self, project_id: int) -> Project:
         """Fetch project by ID or raise ProjectNotFound."""
         project = self._db.query(Project).filter(Project.id == project_id).one_or_none()
         if not project:
             raise ProjectNotFound(f"Project {project_id} not found")
         return project
-    
-    def _get_items_df(self, project_id: int, weeks: int, item_type: str) -> pd.DataFrame:
-        """Load cached items into a DataFrame, filtered by date and type."""
-        items = self._db.query(CachedItem).filter(CachedItem.project_id == project_id).all()
+
+    def get_items_df(self, project_id: int, weeks: int, item_type: str) -> pd.DataFrame:
+        """Load cached items into a DataFrame, filtered by date and type.
+
+        Uses selectinload for transitions to avoid row-duplication (joinedload) and
+        cursor-corruption (lazy loading). This is the single canonical implementation
+        used by both service methods and API endpoints that need raw DataFrame access.
+        """
+        items = (
+            self._db.query(CachedItem)
+            .filter(CachedItem.project_id == project_id)
+            .options(selectinload(CachedItem.transitions))
+            .all()
+        )
         if not items:
             return pd.DataFrame()
-        
+
         records = []
         for item in items:
-            # Convert ItemTransition objects to list of dicts
             status_transitions = None
-            try:
-                if item.transitions:
-                    status_transitions = [
-                        {
-                            "from_status": t.from_status,
-                            "to_status": t.to_status,
-                            "transitioned_at": t.transitioned_at,
-                        }
-                        for t in item.transitions
-                    ]
-            except Exception:
-                # Lazy loading failed, skip transitions
-                pass
-            
+            if item.transitions:
+                status_transitions = [
+                    {
+                        "from_status": t.from_status,
+                        "to_status": t.to_status,
+                        "transitioned_at": t.transitioned_at,
+                    }
+                    for t in item.transitions
+                ]
+
             record = {
                 "item_key": item.item_key,
                 "item_type": item.item_type,
@@ -703,30 +818,29 @@ class MetricsService:
             if item.workflow_timestamps:
                 record.update(item.workflow_timestamps)
             records.append(record)
-        
+
         df = pd.DataFrame(records)
         if df.empty:
             return df
-        
+
         # Convert date columns to datetime without timezone
-        date_cols = [c for c in df.columns if c not in {"item_key", "item_type", "creator", "cycle_time_days", "lead_time_days", "status_transitions"}]
+        non_date_cols = {"item_key", "item_type", "creator", "cycle_time_days", "lead_time_days", "status_transitions"}
+        date_cols = [c for c in df.columns if c not in non_date_cols]
         for col in date_cols:
             try:
                 df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
                 df[col] = df[col].dt.tz_localize(None)
             except Exception:
                 pass
-        
-        # Filter by item type
+
         if item_type and item_type != "all":
             df = df[df["item_type"] == item_type]
-        
-        # Filter by weeks (created_at >= cutoff)
+
         if weeks and weeks > 0:
             cutoff = _utcnow() - timedelta(weeks=weeks)
             if "created_at" in df.columns:
                 df = df[df["created_at"] >= cutoff]
-        
+
         return df
     
     def _get_done_column(self, project: Project) -> Optional[str]:

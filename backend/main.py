@@ -7,14 +7,15 @@ import os
 import logging
 import sys
 
-# Configure logging with detailed format for debugging
+# Log level defaults to INFO in production; set LOG_LEVEL=DEBUG for verbose output
+log_level = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     stream=sys.stdout
 )
 logger = logging.getLogger(__name__)
-logger.info("🚀 Oannes Backend Starting (DEBUG mode enabled)")
+logger.info("🚀 Oannes Backend Starting")
 
 
 
@@ -44,9 +45,12 @@ app = FastAPI(title="Oannes", version="2.0.0", lifespan=lifespan)
 from api.errors import register_error_handlers
 register_error_handlers(app)
 
+_default_origins = "http://localhost:5173,http://localhost:3000"
+_cors_origins = os.getenv("CORS_ORIGINS", _default_origins).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[o.strip() for o in _cors_origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

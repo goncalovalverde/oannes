@@ -328,3 +328,18 @@ def create_error_response(
         error=error_dict,
         timestamp=timestamp or datetime.utcnow()
     )
+
+
+class MetricsSummary(BaseModel):
+    """Dashboard summary — aggregates all key flow metrics in a single response."""
+    throughput_avg: float
+    throughput_trend_pct: float
+    cycle_time_avg: Optional[float]
+    cycle_time_50th: Optional[float]
+    cycle_time_85th: Optional[float]
+    cycle_time_95th: Optional[float]
+    lead_time_85th: Optional[float]
+    current_wip: int
+    flow_efficiency: float
+    aging_wip_alerts: int
+    item_types: List[str]

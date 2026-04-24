@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict, Literal
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
@@ -12,17 +12,9 @@ import logging
 from database import get_db
 from models.project import Project
 from models.sync_job import CachedItem
-from models.api_response import ResponseEnvelope, MetricResponse, MetricStats, MetricDataPoint
+from models.api_response import ResponseEnvelope, MetricResponse, MetricStats, MetricDataPoint, MetricsSummary
 from calculator.flow import (
-    throughput as calc_throughput,
     cycle_time_by_interval as calc_cycle_time_by_interval,
-    cycle_time_stats,
-    lead_time_stats,
-    cfd as calc_cfd,
-    wip_over_time,
-    flow_efficiency as calc_flow_efficiency,
-    net_flow as calc_net_flow,
-    quality_rate as calc_quality_rate,
     trim_leading_empty_buckets,
 )
 from services.metrics_service import MetricsService, ProjectNotFound as ServiceProjectNotFound
@@ -33,70 +25,12 @@ router = APIRouter()
 
 _now = lambda: datetime.now(timezone.utc).replace(tzinfo=None)  # noqa: E731
 
-def get_items_df(project_id: int, weeks: int, item_type: str, db: Session) -> pd.DataFrame:
-    """Load cached items into a DataFrame, filtered by date and type."""
-    items = db.query(CachedItem).filter(CachedItem.project_id == project_id).options(selectinload(CachedItem.transitions)).all()
-    if not items:
-        return pd.DataFrame()
+logger = logging.getLogger(__name__)
 
-    records = []
-    for item in items:
-        # Convert ItemTransition objects to list of dicts for compatibility with sync_service
-        status_transitions = None
-        if item.transitions:
-            status_transitions = [
-                {
-                    "from_status": t.from_status,
-                    "to_status": t.to_status,
-                    "transitioned_at": t.transitioned_at,
-                }
-                for t in item.transitions
-            ]
-        
-        record = {
-            "item_key": item.item_key,
-            "item_type": item.item_type,
-            "creator": item.creator,
-            "created_at": item.created_at,
-            "cycle_time_days": item.cycle_time_days,
-            "lead_time_days": item.lead_time_days,
-            "status_transitions": status_transitions,
-        }
-        if item.workflow_timestamps:
-            record.update(item.workflow_timestamps)
-        records.append(record)
+router = APIRouter()
 
-    df = pd.DataFrame(records)
-    if df.empty:
-        return df
+_now = lambda: datetime.now(timezone.utc).replace(tzinfo=None)  # noqa: E731
 
-    date_cols = [c for c in df.columns if c not in {"item_key", "item_type", "creator", "cycle_time_days", "lead_time_days", "status_transitions"}]
-    for col in date_cols:
-        try:
-            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
-            df[col] = df[col].dt.tz_localize(None)
-        except Exception:
-            pass
-
-    if item_type and item_type != "all":
-        df = df[df["item_type"] == item_type]
-
-    if weeks and weeks > 0:
-        cutoff = _now() - timedelta(weeks=weeks)
-        if "created_at" in df.columns:
-            df = df[df["created_at"] >= cutoff]
-
-    return df
-
-def percentiles(series: pd.Series) -> dict:
-    clean = series.dropna()
-    if clean.empty:
-        return {"p50": None, "p85": None, "p95": None}
-    return {
-        "p50": float(np.percentile(clean, 50)),
-        "p85": float(np.percentile(clean, 85)),
-        "p95": float(np.percentile(clean, 95)),
-    }
 
 class MonteCarloRequest(BaseModel):
     project_id: int
@@ -105,18 +39,6 @@ class MonteCarloRequest(BaseModel):
     simulations: int = 10000
     weeks_history: int = 12
 
-class MetricsSummary(BaseModel):
-    throughput_avg: float
-    throughput_trend_pct: float
-    cycle_time_avg: Optional[float]
-    cycle_time_50th: Optional[float]
-    cycle_time_85th: Optional[float]
-    cycle_time_95th: Optional[float]
-    lead_time_85th: Optional[float]
-    current_wip: int
-    flow_efficiency: float
-    aging_wip_alerts: int
-    item_types: List[str]
 
 @router.get("/{project_id}/item-types")
 def get_item_types(project_id: int, db: Session = Depends(get_db)):
@@ -168,11 +90,13 @@ def get_cycle_time_interval(
     granularity: Literal["day", "week", "biweek", "month"] = Query("week"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    service = MetricsService(db)
+    try:
+        project = service._get_project(project_id)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-    df = get_items_df(project_id, weeks, item_type, db)
+    df = service.get_items_df(project_id, weeks, item_type)
     if df.empty or "cycle_time_days" not in df.columns:
         return ResponseEnvelope(
             status="success",
@@ -386,99 +310,14 @@ def get_summary(
     item_type: str = Query("all"),
     db: Session = Depends(get_db)
 ):
-    """Return a dashboard summary using a *single* DB query.
-
-    Previously this called 7 sub-endpoints, each issuing its own DB scan.
-    Now we load CachedItems once (wide window to capture open/aging items),
-    derive a narrow slice for time-bounded metrics, and call calculator
-    functions directly on the DataFrames.
-    """
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    steps = sorted(project.workflow_steps, key=lambda s: s.position)
-    done_steps = [s for s in steps if s.stage == "done"]
-    in_flight_steps = [s for s in steps if s.stage == "in_flight"]
-    done_col = done_steps[-1].display_name if done_steps else None
-    steps_list = [
-        {"display_name": s.display_name, "stage": s.stage,
-         "position": s.position, "source_statuses": s.source_statuses or []}
-        for s in steps
-    ]
-
-    # One DB query — wide window covers all open/aging items (they may pre-date `weeks`)
-    df_wide = get_items_df(project_id, weeks * 4, item_type, db)
-
-    # Narrow slice for time-bounded metrics (throughput, CT, LT, flow efficiency)
-    if not df_wide.empty and "created_at" in df_wide.columns:
-        cutoff = pd.Timestamp(_now()) - pd.Timedelta(weeks=weeks)
-        df = df_wide[df_wide["created_at"] >= cutoff].copy()
-    else:
-        df = df_wide
-
-    # item_types — derived from the wide frame so we see all types, not just recent ones
-    item_types: List[str] = (
-        sorted(df_wide["item_type"].dropna().unique().tolist()) if not df_wide.empty else []
-    )
-
-    # --- Throughput (narrow window) ---
-    throughput_avg, throughput_trend_pct = 0.0, 0.0
-    if not df.empty and done_col and done_col in df.columns:
-        tp_df = calc_throughput(df, done_col=done_col, weeks=weeks)
-        if not tp_df.empty:
-            totals = [int(r.get("Total", 0)) for _, r in tp_df.iterrows()]
-            throughput_avg = float(np.mean(totals)) if totals else 0.0
-            half = len(totals) // 2
-            if half > 0 and np.mean(totals[:half]) > 0:
-                throughput_trend_pct = float(
-                    (np.mean(totals[half:]) - np.mean(totals[:half]))
-                    / np.mean(totals[:half]) * 100
-                )
-
-    # --- Cycle time & lead time percentiles (narrow window) ---
-    ct_stats = cycle_time_stats(df) if not df.empty else {}
-    lt_stats = lead_time_stats(df) if not df.empty else {}
-
-    # --- Current WIP — open in-flight items (wide frame: captures old starters) ---
-    current_wip = 0
-    if not df_wide.empty and in_flight_steps and done_col:
-        start_col = in_flight_steps[0].display_name
-        if start_col in df_wide.columns and done_col in df_wide.columns:
-            current_wip = int(
-                (df_wide[start_col].notna() & df_wide[done_col].isna()).sum()
-            )
-
-    # --- Flow efficiency (narrow window) ---
-    fe = calc_flow_efficiency(df, steps_list) if (not df.empty and steps_list) else 0.0
-
-    # --- Aging WIP alerts (wide frame: open items over p85 CT threshold) ---
-    aging_wip_alerts = 0
-    p85 = ct_stats.get("p85")
-    if not df_wide.empty and in_flight_steps and done_col and p85 is not None:
-        start_col = in_flight_steps[0].display_name
-        if start_col in df_wide.columns and done_col in df_wide.columns:
-            open_items = df_wide[df_wide[start_col].notna() & df_wide[done_col].isna()]
-            if not open_items.empty:
-                now_ts = pd.Timestamp(_now())
-                ages = open_items[start_col].apply(
-                    lambda t: (now_ts - t).days if pd.notna(t) else 0
-                ).astype("int64")
-                aging_wip_alerts = int((ages > p85).sum())
-
-    return MetricsSummary(
-        throughput_avg=round(throughput_avg, 1),
-        throughput_trend_pct=round(throughput_trend_pct, 1),
-        cycle_time_avg=ct_stats.get("mean"),
-        cycle_time_50th=ct_stats.get("p50"),
-        cycle_time_85th=ct_stats.get("p85"),
-        cycle_time_95th=ct_stats.get("p95"),
-        lead_time_85th=lt_stats.get("p85"),
-        current_wip=current_wip,
-        flow_efficiency=round(fe, 4),
-        aging_wip_alerts=aging_wip_alerts,
-        item_types=item_types,
-    )
+    """Return a dashboard summary — delegates entirely to MetricsService.summary()."""
+    try:
+        return MetricsService(db).summary(project_id, weeks, item_type)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Summary calculation failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/{project_id}/raw-data")
 def get_raw_data(
@@ -487,11 +326,13 @@ def get_raw_data(
     item_type: str = Query("all"),
     db: Session = Depends(get_db)
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    service = MetricsService(db)
+    try:
+        project = service._get_project(project_id)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-    df = get_items_df(project_id, weeks, item_type, db)
+    df = service.get_items_df(project_id, weeks, item_type)
     if df.empty:
         return {"data": [], "columns": []}
 
@@ -532,11 +373,13 @@ def export_csv(
     db: Session = Depends(get_db)
 ):
     """Export raw data as CSV file."""
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    service = MetricsService(db)
+    try:
+        project = service._get_project(project_id)
+    except ServiceProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
-    df = get_items_df(project_id, weeks, item_type, db)
+    df = service.get_items_df(project_id, weeks, item_type)
     if df.empty:
         # Return empty CSV with headers
         output = io.StringIO()
@@ -604,12 +447,8 @@ def get_available_statuses(
 
 @router.post("/monte-carlo")
 def run_monte_carlo(data: MonteCarloRequest, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == data.project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
     from calculator.monte_carlo import simulate_when_done, simulate_how_many
-    
+
     service = MetricsService(db)
     try:
         tp = service.throughput(data.project_id, data.weeks_history, "all", granularity="week")
