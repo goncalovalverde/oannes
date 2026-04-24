@@ -1,5 +1,5 @@
 import { ChartErrorBoundary } from '../ui/ChartErrorBoundary'
-import Plot from 'react-plotly.js'
+import Plot from './Plot'
 import { darkLayout, plotConfig, TYPE_COLORS } from './plotConfig'
 import type { WipPoint } from '../../types'
 

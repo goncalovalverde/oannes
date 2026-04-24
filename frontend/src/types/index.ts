@@ -98,6 +98,7 @@ export interface AgingItem {
   age_days: number
   is_over_85th: boolean
   started_at: string | null
+  item_url?: string | null
 }
 
 export interface MonteCarloResult {

@@ -1,5 +1,5 @@
 import { ChartErrorBoundary } from '../ui/ChartErrorBoundary'
-import Plot from 'react-plotly.js'
+import Plot from './Plot'
 import { darkLayout, plotConfig, COLORS } from './plotConfig'
 import type { ScatterPoint } from '../../types'
 

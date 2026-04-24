@@ -26,6 +26,7 @@ export default function AgingWIP() {
     age_days: item.value,
     is_over_85th: item.by_type?.is_over_85th || false,
     started_at: null,
+    item_url: item.by_type?.item_url || null,
   }))
 
   const atRiskCount = data.filter(d => d.is_over_85th).length
@@ -48,9 +49,9 @@ export default function AgingWIP() {
       </div>
 
       <div className="bg-surface border border-border rounded-xl p-5">
-        <div className="text-sm font-bold mb-1">Aging WIP Chart</div>
-        <div className="text-xs text-muted mb-4">Current in-flight items sorted by age. Dashed line = 85th percentile cycle time.</div>
-        {isLoading ? <ChartSkeleton /> : <AgingWIPChart data={data} p85={summary?.cycle_time_85th} />}
+        <div className="text-sm font-bold mb-1">Aging WIP Distribution</div>
+        <div className="text-xs text-muted mb-4">Distribution of in-flight items by age. Dashed line = 85th percentile cycle time.</div>
+        {isLoading ? <ChartSkeleton /> : <AgingWIPChart key={data.length > 0 ? 'has-data' : 'empty'} data={data} p85={summary?.cycle_time_85th} />}
       </div>
 
       {/* Table */}
@@ -69,7 +70,12 @@ export default function AgingWIP() {
             <tbody>
               {data.map((item, i) => (
                 <tr key={i} className="border-b border-border/50 hover:bg-surface2 transition-colors">
-                  <td className="px-4 py-2.5 font-mono text-xs text-primary">{item.item_key}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs">
+                    {item.item_url
+                      ? <a href={item.item_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{item.item_key}</a>
+                      : <span className="text-primary">{item.item_key}</span>
+                    }
+                  </td>
                   <td className="px-4 py-2.5 text-muted2">{item.item_type}</td>
                   <td className="px-4 py-2.5 text-muted2">{item.stage}</td>
                   <td className="px-4 py-2.5 text-right font-semibold">{item.age_days}</td>

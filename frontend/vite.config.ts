@@ -22,7 +22,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           // Heavy visualisation library in its own cacheable chunk
-          plotly: ['react-plotly.js', 'plotly.js'],
+          plotly: ['react-plotly.js', 'plotly.js-dist-min'],
           // React ecosystem
           react: ['react', 'react-dom', 'react-router-dom'],
           // Data/state libraries

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional, Any, Dict, Literal
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
@@ -35,7 +35,7 @@ _now = lambda: datetime.now(timezone.utc).replace(tzinfo=None)  # noqa: E731
 
 def get_items_df(project_id: int, weeks: int, item_type: str, db: Session) -> pd.DataFrame:
     """Load cached items into a DataFrame, filtered by date and type."""
-    items = db.query(CachedItem).filter(CachedItem.project_id == project_id).all()
+    items = db.query(CachedItem).filter(CachedItem.project_id == project_id).options(selectinload(CachedItem.transitions)).all()
     if not items:
         return pd.DataFrame()
 

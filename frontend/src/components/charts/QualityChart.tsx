@@ -1,5 +1,5 @@
 import { ChartErrorBoundary } from '../ui/ChartErrorBoundary'
-import Plot from 'react-plotly.js'
+import Plot from './Plot'
 import { darkLayout, plotConfig, COLORS } from './plotConfig'
 
 interface QualityPoint {
@@ -27,6 +27,14 @@ export default function QualityChart({ data }: Props) {
   const weeks = data.map(d => d.week)
   const pctValues = data.map(d => d.quality_pct)
   const bugCounts = data.map(d => d.bugs)
+
+  // Diagnostic — remove once issue is confirmed fixed
+  const maxPct = Math.max(...pctValues)
+  if (maxPct > 200) {
+    console.warn('[QualityChart] ⚠️ Suspiciously large quality_pct! max=', maxPct, 'first 3=', data.slice(0, 3))
+  } else {
+    console.log('[QualityChart] ✅ data OK — n=', data.length, 'maxPct=', maxPct)
+  }
 
   const pointColors = pctValues.map(v => {
     if (v >= TARGET_PCT) return COLORS.success

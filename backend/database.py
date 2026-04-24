@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 from config import settings
 import logging
 from typing import Optional
@@ -13,7 +13,7 @@ engine = create_engine(
         "check_same_thread": False,
         "timeout": 30,
     },
-    poolclass=StaticPool,
+    poolclass=NullPool,
     echo_pool=False,
 )
 

@@ -16,7 +16,7 @@ from typing import Optional
 
 import pandas as pd
 import numpy as np
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from models.project import Project
 from models.sync_job import CachedItem
@@ -497,10 +497,14 @@ class MetricsService:
         
         # Calculate age for each item
         now = pd.Timestamp(_utcnow())
+        config = project.config or {}
+        jira_url = config.get("jira_url", "").rstrip("/")
+
         result = []
         ages = []
         for _, row in in_progress.iterrows():
             age = (now - row[start_col]).days if pd.notna(row[start_col]) else 0
+            item_key = str(row["item_key"])
             
             # Find current stage (most recent stage touched)
             current_stage = start_step.display_name
@@ -509,15 +513,18 @@ class MetricsService:
                 if sc in df.columns and pd.notna(row.get(sc)):
                     current_stage = step.display_name
                     break
+
+            item_url = f"{jira_url}/browse/{item_key}" if jira_url else None
             
             result.append(MetricDataPoint(
                 date=f"{int(age)}d",
                 value=float(age),
                 by_type={
-                    "item_key": str(row["item_key"]),
+                    "item_key": item_key,
                     "item_type": str(row["item_type"]),
                     "stage": current_stage,
-                    "is_over_85th": p85_threshold is not None and age > p85_threshold
+                    "is_over_85th": p85_threshold is not None and age > p85_threshold,
+                    "item_url": item_url,
                 }
             ))
             ages.append(float(age))
@@ -655,7 +662,7 @@ class MetricsService:
     
     def _get_project(self, project_id: int) -> Project:
         """Fetch project by ID or raise ProjectNotFound."""
-        project = self._db.query(Project).filter(Project.id == project_id).first()
+        project = self._db.query(Project).filter(Project.id == project_id).one_or_none()
         if not project:
             raise ProjectNotFound(f"Project {project_id} not found")
         return project
@@ -670,15 +677,19 @@ class MetricsService:
         for item in items:
             # Convert ItemTransition objects to list of dicts
             status_transitions = None
-            if item.transitions:
-                status_transitions = [
-                    {
-                        "from_status": t.from_status,
-                        "to_status": t.to_status,
-                        "transitioned_at": t.transitioned_at,
-                    }
-                    for t in item.transitions
-                ]
+            try:
+                if item.transitions:
+                    status_transitions = [
+                        {
+                            "from_status": t.from_status,
+                            "to_status": t.to_status,
+                            "transitioned_at": t.transitioned_at,
+                        }
+                        for t in item.transitions
+                    ]
+            except Exception:
+                # Lazy loading failed, skip transitions
+                pass
             
             record = {
                 "item_key": item.item_key,

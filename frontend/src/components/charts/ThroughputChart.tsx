@@ -1,5 +1,5 @@
 import { ChartErrorBoundary } from '../ui/ChartErrorBoundary'
-import Plot from 'react-plotly.js'
+import Plot from './Plot'
 import { darkLayout, plotConfig, COLORS, TYPE_COLORS } from './plotConfig'
 import type { ThroughputPoint } from '../../types'
 
@@ -10,6 +10,15 @@ export default function ThroughputChart({ data, weeks }: Props) {
 
   const types = Object.keys(data[0]).filter(k => k !== 'week' && k !== 'Total')
   const weeks_x = data.map(d => d.week)
+
+  // Diagnostic — remove once issue is confirmed fixed
+  const totals_raw = data.map(d => d.Total ?? 0)
+  const maxTotal = Math.max(...totals_raw)
+  if (maxTotal > 1000) {
+    console.warn('[ThroughputChart] ⚠️ Suspiciously large values detected! maxTotal=', maxTotal, 'first 3 points=', data.slice(0, 3))
+  } else {
+    console.log('[ThroughputChart] ✅ data OK — n=', data.length, 'maxTotal=', maxTotal)
+  }
 
   const traces: Plotly.Data[] = types.map((t, i) => ({
     type: 'bar',
