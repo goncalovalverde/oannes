@@ -31,7 +31,6 @@ def _create_project(client, steps=None):
         "name": "Metrics Test Project",
         "platform": "csv",
         "config": {"file_path": "/tmp/dummy.csv"},
-        "sync_frequency": "manual",
         "workflow_steps": steps,
     })
     assert resp.status_code == 200, resp.text

@@ -1,7 +1,7 @@
 """SyncService: orchestrates fetching data from a connector and persisting to CachedItem.
 
-Extracted from api/sync.py to satisfy SRP: the API layer only handles HTTP,
-the scheduler only handles timers — both delegate execution here.
+Extracted from api/sync.py to satisfy SRP: the API layer only handles HTTP;
+sync is always triggered manually by the user.
 """
 from __future__ import annotations
 

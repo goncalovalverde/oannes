@@ -7,7 +7,6 @@ def _create_project(client, name="Test Project", platform="csv"):
         "name": name,
         "platform": platform,
         "config": {"file_path": "/tmp/test.csv"},
-        "sync_frequency": "manual",
         "workflow_steps": [
             {"display_name": "Backlog",     "stage": "queue", "position": 0, "source_statuses": ["Backlog"]},
             {"display_name": "In Progress", "stage": "start", "position": 1, "source_statuses": ["In Progress"]},
@@ -165,14 +164,14 @@ class TestProjectCreateValidation:
     def test_create_invalid_platform_returns_422(self, client):
         r = client.post("/api/projects", json={
             "name": "Bad", "platform": "oracle_db",
-            "config": {}, "sync_frequency": "hourly",
+            "config": {},
         })
         assert r.status_code == 422
 
     def test_create_invalid_stage_in_workflow_returns_422(self, client):
         r = client.post("/api/projects", json={
             "name": "Bad", "platform": "csv",
-            "config": {"file_path": "/f.csv"}, "sync_frequency": "manual",
+            "config": {"file_path": "/f.csv"},
             "workflow_steps": [
                 {"display_name": "Backlog", "stage": "invalid_stage",
                  "position": 0, "source_statuses": []}
