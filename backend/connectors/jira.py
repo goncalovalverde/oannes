@@ -307,25 +307,64 @@ class JiraConnector(BaseConnector):
             logger.error(f"[Jira Search v2] Error: {type(e).__name__}: {str(e)}")
             raise
 
+    def _search_issues_v3(self, jql: str, start: int, batch: int) -> dict:
+        """Call Jira Cloud REST API v3 /search/jql directly."""
+        url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/search/jql"
+        params = {
+            "jql": jql,
+            "startAt": start,
+            "maxResults": batch,
+            "expand": "changelog",
+            "fields": "*all",
+        }
+
+        jira = self._get_client()
+
+        logger.debug(f"[Jira Search v3] >>> REQUEST")
+        logger.debug(f"[Jira Search v3]     URL: {url}")
+        logger.debug(f"[Jira Search v3]     Params: startAt={start}, maxResults={batch}")
+
+        try:
+            resp = jira._session.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+            logger.debug(f"[Jira Search v3] <<< RESPONSE")
+            logger.debug(f"[Jira Search v3]     Status: {resp.status_code}")
+            logger.debug(f"[Jira Search v3]     Issues Count: {len(data.get('issues', []))}")
+            logger.debug(f"[Jira Search v3]     Total: {data.get('total')}")
+
+            if not data.get('issues'):
+                logger.warning(f"[Jira Search v3] No issues found. Full response: {data}")
+
+            if "errorMessages" in data and data["errorMessages"]:
+                logger.error(f"[Jira Search v3] Jira application error: {data['errorMessages']}")
+                raise JIRAError(status_code=400, text="; ".join(data["errorMessages"]))
+
+            return data
+        except Exception as e:
+            logger.error(f"[Jira Search v3] Error: {type(e).__name__}: {str(e)}")
+            raise
+
     def _fetch_all_issues(self, jql: str) -> list:
-        """Fetch all issues via paginated v2 /search calls.
-        
-        Args:
-            jql: The JQL query string
-            
-        Returns:
-            List of all issues (paginated)
+        """Fetch all issues via paginated /search calls.
+
+        Uses v3 or v2 based on the api_version config (default: v2).
         """
         all_issues = []
         start = 0
         batch = 100
-        
+
+        api_version = self.config.get("api_version", "v2")
+        search_method = self._search_issues_v3 if api_version == "v3" else self._search_issues_v2
+        logger.info(f"[Jira Fetch] Using API {api_version}")
+
         # Get request delay from config (default 100ms)
         request_delay_ms = int(self.config.get("request_delay_ms", 100))
         request_delay_sec = request_delay_ms / 1000.0
 
         while True:
-            data = self._retry_with_rate_limit_backoff(self._search_issues_v2, jql, start, batch)
+            data = self._retry_with_rate_limit_backoff(search_method, jql, start, batch)
             issues = data.get("issues", [])
             if not issues:
                 break
@@ -342,7 +381,11 @@ class JiraConnector(BaseConnector):
     def test_connection(self) -> dict:
         logger.info(f"[Jira Test] Starting connection test with auth_type: {self.config.get('auth_type')}")
         logger.debug(f"[Jira Test] URL: {self.config.get('jira_url')}")
+        api_version = self.config.get("api_version", "v2")
+        logger.info(f"[Jira Test] Using API {api_version}")
         try:
+            if api_version == "v3":
+                return self._test_connection_v3()
             return self._test_connection_v2()
         except Exception as e:
             logger.error(f"[Jira Test] <<< ERROR")
@@ -353,6 +396,34 @@ class JiraConnector(BaseConnector):
             user_message = _format_jira_error(e, context="during connection test")
             logger.error(f"[Jira Test] ❌ Connection failed: {type(e).__name__}: {str(e)}", exc_info=True)
             return {"success": False, "message": user_message, "boards": [], "api_version_detected": None}
+
+    def _test_connection_v3(self) -> dict:
+        """Test connection using v3 API endpoints (Jira Cloud)."""
+        logger.debug("[Jira Test v3] Testing v3 endpoints")
+        jira = self._get_client()
+        try:
+            url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/myself"
+            resp = jira._session.get(url)
+            resp.raise_for_status()
+            user = resp.json()
+            logger.info(f"[Jira Test v3] ✅ Authenticated as: {user.get('displayName', 'Unknown')}")
+
+            url = f"{self.config['jira_url'].rstrip('/')}/rest/api/3/project/search"
+            resp = jira._session.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+            projects = data.get('values', [])
+            logger.info(f"[Jira Test v3] ✅ Connected successfully (API v3). Found {len(projects)} projects")
+
+            return {
+                "success": True,
+                "message": f"Connected successfully (API v3). Found {len(projects)} projects.",
+                "boards": [{"id": p.get("key"), "name": p.get("name")} for p in projects],
+                "api_version_detected": "v3"
+            }
+        except Exception as e:
+            logger.error(f"[Jira Test v3] Error: {type(e).__name__}: {str(e)}")
+            raise
 
     def _test_connection_v2(self) -> dict:
         """Test connection using v2 API endpoints."""

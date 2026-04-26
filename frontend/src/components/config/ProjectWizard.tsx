@@ -23,6 +23,7 @@ const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?:
     { key: 'email',     label: 'Email',       type: 'email', placeholder: 'you@company.com', conditional: (cfg) => cfg.auth_type === 'api_token' },
     { key: 'api_token', label: 'API Token',   type: 'password', help: 'Create at: id.atlassian.com/manage-profile/security/api-tokens', conditional: (cfg) => cfg.auth_type === 'api_token' },
     { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', help: 'Create at: your Jira instance → Profile → Personal Access Tokens', conditional: (cfg) => cfg.auth_type === 'personal_access_token' },
+    { key: 'jira_api_version', label: 'API Version', type: 'select', optional: false, default: 'v2', options: [{ value: 'v2', label: 'v2 — Server / Data Center' }, { value: 'v3', label: 'v3 — Cloud' }], help: 'Use v2 for self-hosted Jira; use v3 for Jira Cloud (atlassian.net).' },
     { key: 'jql',       label: 'JQL Filter',  placeholder: 'project = MYPROJ', optional: true },
     { key: 'request_delay_ms', label: 'Request Delay (ms)', type: 'number', default: '100', optional: true, help: 'Add delay between API requests to avoid rate limiting. Recommended: 100-500ms for large projects.' },
   ],
@@ -62,10 +63,13 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [name, setName] = useState(existing?.name ?? '')
   const [config, setConfig] = useState<Record<string, string>>(() => {
     const baseConfig = existing?.config ?? {}
-    // Set default auth_type for Jira if creating new project
+    // Set defaults for Jira if creating new project
     if (!existing) {
       if (!baseConfig.auth_type) {
         baseConfig.auth_type = 'api_token'
+      }
+      if (!baseConfig.jira_api_version) {
+        baseConfig.jira_api_version = 'v2'
       }
     }
     return baseConfig
@@ -76,7 +80,7 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [workflowMap, setWorkflowMap] = useState<Record<string, string>>(
     Object.fromEntries(existing?.workflow_steps?.map(s => s.source_statuses.map(ss => [ss, s.stage])).flat() ?? [])
   )
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; api_version_detected?: string | null } | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [draggedStatus, setDraggedStatus] = useState<string | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
@@ -84,11 +88,14 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [csvValidating, setCsvValidating] = useState(false)
   const csvFileRef = useRef<HTMLInputElement>(null)
 
-  // Set default auth_type for Jira when platform is selected
+  // Set default auth_type and api_version for Jira when platform is selected
   useEffect(() => {
     if (platform === 'jira') {
       if (!config.auth_type) {
         setConfig(c => ({ ...c, auth_type: 'api_token' }))
+      }
+      if (!config.jira_api_version) {
+        setConfig(c => ({ ...c, jira_api_version: 'v2' }))
       }
     }
   }, [platform])
@@ -368,7 +375,14 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
 
               {testResult && (
                 <AlertBanner type={testResult.success ? 'info' : 'error'}>
-                  <div>{testResult.message}</div>
+                  <div>
+                    <div>{testResult.message}</div>
+                    {testResult.api_version_detected && (
+                      <div className="text-[10px] mt-1 opacity-75">
+                        API Version: {testResult.api_version_detected.toUpperCase()}
+                      </div>
+                    )}
+                  </div>
                 </AlertBanner>
               )}
 

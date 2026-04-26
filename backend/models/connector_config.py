@@ -32,10 +32,12 @@ class JiraConfig(BaseModel):
     - auth_type: "api_token" or "personal_access_token" (default: "api_token")
     - project_key: Jira project key (e.g., "PROJ")
     - jql: Custom JQL for filtering issues
+    - api_version: "v2" (Server/Data Center) or "v3" (Cloud) (default: "v2")
     - request_delay_ms: Delay between requests in milliseconds (default: 100)
     - max_retries: Maximum retries on rate limit (default: 3)
     
-    Note: Accepts both 'url' and 'jira_url', both 'email' and 'username' for compatibility.
+    Note: Accepts both 'url' and 'jira_url', both 'email' and 'username',
+    and 'jira_api_version' as an alias for 'api_version'.
     """
     
     jira_url: Optional[str] = Field(
@@ -65,6 +67,10 @@ class JiraConfig(BaseModel):
     jql: Optional[str] = Field(
         None,
         description="Custom JQL query for filtering issues"
+    )
+    api_version: str = Field(
+        "v2",
+        description="Jira REST API version to use: 'v2' (Server/Data Center) or 'v3' (Cloud)"
     )
     request_delay_ms: int = Field(
         100,
@@ -99,6 +105,7 @@ class JiraConfig(BaseModel):
         Maps:
         - 'url' -> 'jira_url'
         - 'email' -> 'username'
+        - 'jira_api_version' -> 'api_version'
         """
         if isinstance(data, dict):
             # Map 'url' -> 'jira_url' if not already set
@@ -107,6 +114,9 @@ class JiraConfig(BaseModel):
             # Map 'email' -> 'username' if not already set
             if 'email' in data and 'username' not in data:
                 data['username'] = data.pop('email')
+            # Map 'jira_api_version' -> 'api_version' if not already set
+            if 'jira_api_version' in data and 'api_version' not in data:
+                data['api_version'] = data.pop('jira_api_version')
         return data
     
     @model_validator(mode='after')
