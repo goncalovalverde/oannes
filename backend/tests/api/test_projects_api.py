@@ -185,3 +185,10 @@ class TestProjectCreateValidation:
         })
         assert r.status_code == 422
 
+    def test_create_empty_name_returns_422(self, client):
+        """Empty string name should be rejected — a project must have a non-empty name."""
+        r = client.post("/api/projects", json={
+            "name": "", "platform": "csv", "config": {},
+        })
+        assert r.status_code == 422, f"Expected 422 for empty name, got {r.status_code}: {r.text}"
+

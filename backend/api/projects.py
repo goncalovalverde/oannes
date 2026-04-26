@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from database import get_db
 from models.project import Project, WorkflowStep
@@ -31,7 +31,7 @@ class WorkflowStepOut(BaseModel):
     model_config = {"from_attributes": True}
 
 class ProjectCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1, max_length=200)
     platform: _VALID_PLATFORMS
     config: dict = {}
     workflow_steps: List[WorkflowStepCreate] = []

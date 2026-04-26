@@ -11,8 +11,9 @@ os.environ.setdefault("DATA_DIR", "/tmp/oannes_test_data")
 
 from database import Base, get_db  # noqa: E402  (must be after env setup)
 # Import all models so SQLAlchemy knows about them before create_all
-import models.project   # noqa: F401
-import models.sync_job  # noqa: F401
+import models.project        # noqa: F401
+import models.sync_job       # noqa: F401
+import models.item_transition  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

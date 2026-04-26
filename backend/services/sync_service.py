@@ -261,7 +261,7 @@ class SyncService:
                 {
                     "from_status": t.from_status,
                     "to_status": t.to_status,
-                    "transitioned_at": t.transitioned_at,
+                    "transitioned_at": t.transitioned_at.isoformat() if hasattr(t.transitioned_at, "isoformat") else str(t.transitioned_at),
                 }
                 for t in item.transitions
             ]
@@ -269,15 +269,21 @@ class SyncService:
             new_timestamps = compute_workflow_timestamps_from_transitions(
                 transitions_list, steps
             )
-            item.workflow_timestamps = new_timestamps
+            # Ensure all values are ISO strings (JSON-serializable)
+            item.workflow_timestamps = {
+                k: v.isoformat() if hasattr(v, "isoformat") else v
+                for k, v in new_timestamps.items()
+            }
 
             # Recompute cycle/lead time via the shared calculator
             row: dict = {"created_at": item.created_at}
             row.update({k: pd.Timestamp(v) if v else pd.NaT for k, v in new_timestamps.items()})
             tmp_df = pd.DataFrame([row])
             tmp_df = compute_cycle_and_lead(tmp_df, steps)
-            item.cycle_time_days = tmp_df["cycle_time_days"].iloc[0] if "cycle_time_days" in tmp_df.columns else None
-            item.lead_time_days = tmp_df["lead_time_days"].iloc[0] if "lead_time_days" in tmp_df.columns else None
+            ct = tmp_df["cycle_time_days"].iloc[0] if "cycle_time_days" in tmp_df.columns else None
+            lt = tmp_df["lead_time_days"].iloc[0] if "lead_time_days" in tmp_df.columns else None
+            item.cycle_time_days = float(ct) if ct is not None and pd.notna(ct) else None
+            item.lead_time_days = float(lt) if lt is not None and pd.notna(lt) else None
             recomputed += 1
 
         db.commit()

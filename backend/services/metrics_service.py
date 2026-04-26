@@ -201,7 +201,7 @@ class MetricsService:
                 data=[],
                 stats=MetricStats(avg=0, p50=None, p85=None, p95=None),
                 unit="days",
-                period="total"
+                period="individual"
             )
         
         # Calculate percentiles on full dataset
@@ -229,7 +229,7 @@ class MetricsService:
                 p95=stats.get("p95")
             ),
             unit="days",
-            period="total"
+            period="individual"
         )
     
     # ------------------------------------------------------------------
