@@ -23,16 +23,56 @@ Connect Jira, Trello, Azure DevOps, GitLab, Linear, Shortcut or CSV — and get 
 
 ---
 
-## Quick Start (Docker)
+## Docker Images
+
+Images are published to the GitHub Container Registry:
+
+| Tag | Source | Use when |
+|---|---|---|
+| `stable` | Published on every GitHub Release | Production / daily use |
+| `latest` | Built on every push to `main` | Testing the newest changes |
+
+### Run stable (recommended)
 
 ```bash
 docker run -d \
   -p 8000:8000 \
   -v ~/.oannes:/app/data \
+  -e OANNES_SECRET_KEY=your-secret-key \
   --name oannes \
-  ghcr.io/your-org/oannes:latest
+  ghcr.io/goncalovalverde/oannes:stable
 
 open http://localhost:8000
+```
+
+### Run latest
+
+```bash
+docker run -d \
+  -p 8000:8000 \
+  -v ~/.oannes:/app/data \
+  -e OANNES_SECRET_KEY=your-secret-key \
+  --name oannes \
+  ghcr.io/goncalovalverde/oannes:latest
+
+open http://localhost:8000
+```
+
+### Options
+
+| Option | Description |
+|---|---|
+| `-p 8000:8000` | Expose the app on port 8000 |
+| `-v ~/.oannes:/app/data` | Persist the SQLite database across restarts |
+| `-e OANNES_SECRET_KEY=…` | Key used to encrypt connector credentials at rest. Use any long random string. If omitted a new key is generated each run (credentials stored in a previous run will become unreadable). |
+| `--name oannes` | Optional container name for easier management |
+
+### Updating
+
+```bash
+docker pull ghcr.io/goncalovalverde/oannes:stable
+docker stop oannes && docker rm oannes
+# re-run the docker run command above
 ```
 
 ---
@@ -50,7 +90,7 @@ All data stays local. The SQLite database is stored at the volume mount path (`~
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Plotly.js, TanStack Query |
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2, Pydantic v2 |
 | Storage | SQLite (single file, no server) |
-| Connectors | Jira, Trello, Azure DevOps, GitLab (python-gitlab), CSV |
+| Connectors | Jira (v2 + v3), Trello, Azure DevOps, GitLab (python-gitlab), CSV |
 | Packaging | Single Docker image (multi-stage build — Node → Python) |
 | Testing | Pytest + pytest-cov (≥80% enforced), Vitest + React Testing Library |
 
@@ -82,7 +122,7 @@ npm run dev   # → http://localhost:5173 (proxies /api to :8000)
 
 ```bash
 docker build -t oannes .
-docker run -p 8000:8000 -v ~/.oannes:/app/data oannes
+docker run -p 8000:8000 -v ~/.oannes:/app/data -e OANNES_SECRET_KEY=your-secret-key oannes
 ```
 
 ### Dev with docker-compose (hot reload)
@@ -109,7 +149,8 @@ cd frontend && npm test
 
 | Platform | Status |
 |---|---|
-| Jira Cloud | ✅ |
+| Jira Cloud (API v3) | ✅ |
+| Jira Server / Data Center (API v2) | ✅ |
 | Trello | ✅ |
 | Azure DevOps | ✅ |
 | GitLab | ✅ |
