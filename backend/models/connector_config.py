@@ -385,6 +385,6 @@ def validate_connector_config(connector_type: str, config: dict) -> dict:
     
     try:
         validated = validator_class(**config)
-        return validated.dict()
+        return validated.model_dump()
     except Exception as e:
         raise ValueError(f"Invalid {connector_type} configuration: {str(e)}")

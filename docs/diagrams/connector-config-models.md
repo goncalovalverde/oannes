@@ -13,35 +13,31 @@ classDiagram
         +Literal api_version "v2|v3"
         +int request_delay_ms
         +int max_retries
-        +normalize_field_names() "url→jira_url, email→username, jira_api_version→api_version"
         +validate_jira_url()
         +validate_required_and_auth_token()
     }
 
     class TrelloConfig {
         +Optional~str~ api_key
-        +Optional~str~ api_token
-        +Optional~str~ board_id
+        +Optional~str~ token
+        +Optional~str~ project_key
         +int max_retries
-        +normalize_field_names() "token→api_token"
         +validate_required_fields()
     }
 
     class AzureDevOpsConfig {
-        +Optional~str~ organization
-        +Optional~str~ project
-        +Optional~str~ pat
+        +Optional~str~ org_url
+        +Optional~str~ personal_access_token
+        +Optional~str~ project_key
         +int max_retries
-        +normalize_field_names() "personal_access_token→pat"
         +validate_required_fields()
     }
 
     class GitLabConfig {
-        +Optional~str~ gitlab_url
-        +Optional~str~ project_id
-        +Optional~str~ private_token
+        +Optional~str~ url
+        +Optional~str~ access_token
+        +Optional~str~ project_key
         +int max_retries
-        +normalize_field_names() "url→gitlab_url, access_token→private_token"
         +validate_gitlab_url()
         +validate_required_fields()
     }
