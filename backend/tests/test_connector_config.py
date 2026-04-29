@@ -156,8 +156,15 @@ class TestJiraConfig:
 class TestCSVConfig:
     """Test CSV configuration validation."""
     
+    def test_empty_config_is_valid(self):
+        """CSV projects use upload flow — empty config must be accepted."""
+        config = CSVConfig()
+        assert config.file_path is None
+        assert config.delimiter == ","
+        assert config.has_header is True
+
     def test_minimal_csv_config(self):
-        """Minimal valid CSV config."""
+        """file_path is optional but accepted when provided."""
         config = CSVConfig(file_path="/path/to/file.csv")
         assert config.file_path == "/path/to/file.csv"
         assert config.delimiter == ","
@@ -227,6 +234,12 @@ class TestValidateConnectorConfig:
         result = validate_connector_config("csv", config)
         assert result["file_path"] == "/path/to/file.csv"
         assert result["delimiter"] == ";"
+
+    def test_validate_csv_config_empty(self):
+        """Empty CSV config (upload flow) must pass validation."""
+        result = validate_connector_config("csv", {})
+        assert result["file_path"] is None
+        assert result["delimiter"] == ","
     
     def test_unknown_connector_type(self):
         """Should raise error for unknown connector type."""
