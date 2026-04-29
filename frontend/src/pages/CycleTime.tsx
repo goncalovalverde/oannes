@@ -1,6 +1,5 @@
-import { useState } from 'react'
 import { useFilterStore } from '../store/filterStore'
-import { useCycleTime, useItemTypes } from '../api/hooks/useMetrics'
+import { useCycleTime } from '../api/hooks/useMetrics'
 import TimeScatterChart from '../components/charts/TimeScatterChart'
 import TimeHistogram from '../components/charts/TimeHistogram'
 import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
@@ -9,12 +8,6 @@ import EmptyState from '../components/ui/EmptyState'
 export default function CycleTime() {
   const { activeProjectId, weeks, itemType: filterItemType } = useFilterStore()
   const { data, isLoading } = useCycleTime(activeProjectId, weeks, filterItemType)
-  const { data: availableTypes = [] } = useItemTypes(activeProjectId)
-  
-  // Local state for multi-select - initialize with all available types
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => 
-    new Set(availableTypes)
-  )
 
   if (!activeProjectId) return <EmptyState icon="⏱" title="No project selected" description="Select a project from the sidebar." />
 
@@ -24,27 +17,13 @@ export default function CycleTime() {
   const rawData = data?.data ?? []
   
   // Transform API data to component format
-  const allScatter = rawData.map((item: any) => ({
+  const scatter = rawData.map((item: any) => ({
     completed_at: item.date,
     cycle_time_days: item.value,
-    item_type: item.by_type?.item_type || 'Unknown',
     item_key: item.by_type?.item_key || '',
   }))
-  
-  // Filter scatter data based on selected types
-  const scatter = allScatter.filter((item: any) => selectedTypes.has(item.item_type))
 
-  const toggleType = (type: string) => {
-    const newSelected = new Set(selectedTypes)
-    if (newSelected.has(type)) {
-      newSelected.delete(type)
-    } else {
-      newSelected.add(type)
-    }
-    setSelectedTypes(newSelected)
-  }
-
-  if (!isLoading && allScatter.length === 0) {
+  if (!isLoading && scatter.length === 0) {
     return (
       <EmptyState 
         icon="⏱" 
@@ -71,33 +50,6 @@ export default function CycleTime() {
           </div>
         ))}
       </div>
-
-      {/* Issue type filter */}
-      {availableTypes.length > 1 && (
-        <div className="bg-surface border border-border rounded-xl p-4">
-          <div className="text-xs font-semibold text-muted uppercase tracking-widest mb-3">Filter by Issue Type</div>
-          <div className="flex flex-wrap gap-2">
-            {availableTypes.map(type => (
-              <button
-                key={type}
-                onClick={() => toggleType(type)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  selectedTypes.has(type)
-                    ? 'bg-primary text-white'
-                    : 'bg-surface2 text-muted hover:bg-border'
-                }`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-          {selectedTypes.size > 0 && (
-            <div className="text-xs text-muted2 mt-2">
-              Showing {scatter.length} of {allScatter.length} items
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Scatterplot */}
       <div className="bg-surface border border-border rounded-xl p-5">
