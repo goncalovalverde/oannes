@@ -39,10 +39,12 @@ class TestTriggerSync:
 
 
 class TestSyncStatus:
-    def test_no_jobs_returns_404(self, client):
+    def test_no_jobs_returns_null(self, client):
+        """A project that has never been synced returns 200 with null body."""
         pid = _create_project(client)
         r = client.get(f"/api/sync/{pid}/status")
-        assert r.status_code == 404
+        assert r.status_code == 200
+        assert r.json() is None
 
     def test_status_after_trigger(self, client):
         pid = _create_project(client)

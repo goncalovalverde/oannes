@@ -61,13 +61,12 @@ def trigger_sync(project_id: int, background_tasks: BackgroundTasks, db: Session
         logger.exception(f"Failed to create sync job for project {project_id}")
         raise HTTPException(status_code=500, detail="Failed to create sync job")
 
-
-@router.get("/{project_id}/status", response_model=SyncJobOut)
+@router.get("/{project_id}/status", response_model=Optional[SyncJobOut])
 def get_sync_status(project_id: int, db: Session = Depends(get_db)):
+    if not db.query(Project).filter(Project.id == project_id).first():
+        raise HTTPException(status_code=404, detail="Project not found")
     job = db.query(SyncJob).filter(SyncJob.project_id == project_id).order_by(SyncJob.id.desc()).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="No sync jobs found")
-    return job
+    return job  # None (never synced) is a valid 200 response
 
 
 @router.get("/{project_id}/history", response_model=List[SyncJobOut])
