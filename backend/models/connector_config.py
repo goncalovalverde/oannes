@@ -140,12 +140,10 @@ class JiraConfig(BaseModel):
 class CSVConfig(BaseModel):
     """Validates CSV connector configuration.
 
-    All fields are optional — CSV projects use in-memory file upload
-    (POST /api/sync/{id}/csv-upload) rather than a file path on disk.
-    Configuration fields are available for future path-based imports.
-    
+    CSV projects use in-memory file upload (POST /api/sync/{id}/csv-upload).
+    All fields are optional — an empty config dict is valid for project creation.
+
     Optional:
-    - file_path: Reserved for future path-based import (not used in upload flow)
     - delimiter: CSV delimiter (default: ",")
     - has_header: Whether CSV has header row (default: true)
     - encoding: File encoding (default: "utf-8")
@@ -154,11 +152,7 @@ class CSVConfig(BaseModel):
     - status_column: Column name for status
     - date_column: Column name for dates
     """
-    
-    file_path: Optional[str] = Field(
-        None,
-        description="Path to CSV file (reserved for future path-based import; upload flow does not use this)"
-    )
+
     delimiter: str = Field(
         ",",
         description="CSV delimiter character"

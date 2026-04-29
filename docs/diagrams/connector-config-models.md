@@ -59,7 +59,6 @@ classDiagram
     }
 
     class CSVConfig {
-        +str file_path
         +str delimiter
         +bool has_header
         +str encoding

@@ -156,17 +156,9 @@ class TestJiraConfig:
 class TestCSVConfig:
     """Test CSV configuration validation."""
     
-    def test_empty_config_is_valid(self):
-        """CSV projects use upload flow — empty config must be accepted."""
-        config = CSVConfig()
-        assert config.file_path is None
-        assert config.delimiter == ","
-        assert config.has_header is True
-
     def test_minimal_csv_config(self):
-        """file_path is optional but accepted when provided."""
-        config = CSVConfig(file_path="/path/to/file.csv")
-        assert config.file_path == "/path/to/file.csv"
+        """All fields optional — empty config is valid (upload flow)."""
+        config = CSVConfig()
         assert config.delimiter == ","
         assert config.has_header is True
         assert config.encoding == "utf-8"
@@ -174,41 +166,19 @@ class TestCSVConfig:
     
     def test_custom_delimiter(self):
         """Should support custom delimiters."""
-        config = CSVConfig(
-            file_path="/path/to/file.csv",
-            delimiter=";"
-        )
+        config = CSVConfig(delimiter=";")
         assert config.delimiter == ";"
     
     def test_max_file_size_bounds(self):
         """max_file_size_mb must be 1-500."""
-        # Valid: 1MB
-        config = CSVConfig(
-            file_path="/path/to/file.csv",
-            max_file_size_mb=1
-        )
-        assert config.max_file_size_mb == 1
-        
-        # Valid: 500MB
-        config = CSVConfig(
-            file_path="/path/to/file.csv",
-            max_file_size_mb=500
-        )
-        assert config.max_file_size_mb == 500
-        
-        # Invalid: 0MB
+        assert CSVConfig(max_file_size_mb=1).max_file_size_mb == 1
+        assert CSVConfig(max_file_size_mb=500).max_file_size_mb == 500
+
         with pytest.raises(ValidationError):
-            CSVConfig(
-                file_path="/path/to/file.csv",
-                max_file_size_mb=0
-            )
-        
-        # Invalid: 501MB
+            CSVConfig(max_file_size_mb=0)
+
         with pytest.raises(ValidationError):
-            CSVConfig(
-                file_path="/path/to/file.csv",
-                max_file_size_mb=501
-            )
+            CSVConfig(max_file_size_mb=501)
 
 
 class TestValidateConnectorConfig:
@@ -227,18 +197,12 @@ class TestValidateConnectorConfig:
     
     def test_validate_csv_config(self):
         """Should validate CSV config through helper function."""
-        config = {
-            "file_path": "/path/to/file.csv",
-            "delimiter": ";"
-        }
-        result = validate_connector_config("csv", config)
-        assert result["file_path"] == "/path/to/file.csv"
+        result = validate_connector_config("csv", {"delimiter": ";"})
         assert result["delimiter"] == ";"
 
     def test_validate_csv_config_empty(self):
         """Empty CSV config (upload flow) must pass validation."""
         result = validate_connector_config("csv", {})
-        assert result["file_path"] is None
         assert result["delimiter"] == ","
     
     def test_unknown_connector_type(self):
