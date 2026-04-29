@@ -31,6 +31,31 @@ export default function CycleTimeIntervalChart({ data }: Props) {
     },
   ]
 
+  // Linear trendline (least squares)
+  const n = avgCycleTimes.length
+  if (n >= 2) {
+    const sumX = avgCycleTimes.reduce((acc, _, i) => acc + i, 0)
+    const sumY = avgCycleTimes.reduce((acc, v) => acc + v, 0)
+    const sumXY = avgCycleTimes.reduce((acc, v, i) => acc + i * v, 0)
+    const sumX2 = avgCycleTimes.reduce((acc, _, i) => acc + i * i, 0)
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)
+    const intercept = (sumY - slope * sumX) / n
+
+    const extendFactor = 0.05
+    const minX = -extendFactor * (n - 1)
+    const maxX = (n - 1) * (1 + extendFactor)
+    const trendX = [minX, maxX]
+    const trendY = trendX.map(i => slope * i + intercept)
+
+    traces.push({
+      type: 'scatter', mode: 'lines', name: 'Trend',
+      x: trendX.map(i => periods[Math.round(i)] || (i < 0 ? periods[0] : periods[n - 1])),
+      y: trendY,
+      line: { color: COLORS.purple, dash: 'dash', width: 2 },
+      opacity: 0.7,
+    })
+  }
+
   return (
     <ChartErrorBoundary chartName="CycleTimeIntervalChart">
       <Plot
