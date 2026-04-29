@@ -1,10 +1,10 @@
 # Oannes
 
-**Team flow metrics, powered by the Troy Magennis methodology.**
+**Team flow metrics, inspired by Troy Magennis ideas.**
 
 Connect Jira, Trello, Azure DevOps, GitLab, Linear, Shortcut or CSV — and get interactive charts for throughput, cycle time, lead time, WIP, CFD, aging WIP, flow efficiency, and Monte Carlo forecasting. No spreadsheets. No YAML files. Everything runs locally on your machine.
 
-> **Oannes is a full reengineering of [Seshat](https://github.com/goncalovalverde/seshat)** — the original CLI-based flow metrics tool. Seshat required manual YAML configuration, had no GUI, and produced static charts. Oannes replaces that with a modern web UI, a REST API backend, multi-platform connectors, and persistent project storage — while keeping the same Troy Magennis forecasting methodology at its core.
+> **Oannes is a full reengineering of [Seshat](https://github.com/goncalovalverde/seshat)** — the original CLI-based flow metrics tool. Seshat required manual YAML configuration, had no GUI, and produced static charts. Oannes replaces that with a modern web UI, a REST API backend, multi-platform connectors, and persistent project storage.
 
 ---
 
