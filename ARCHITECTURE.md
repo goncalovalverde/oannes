@@ -16,6 +16,7 @@ This document describes the core architecture, design decisions, business logic,
 6. [Key Design Decisions](#key-design-decisions)
 7. [Testing Strategy](#testing-strategy)
 8. [Deployment](#deployment)
+9. [UML Diagrams](#uml-diagrams)
 
 ---
 
@@ -99,12 +100,14 @@ Each synced work item has these fields:
 
 ### Layering
 
+See [`docs/diagrams/system-component.md`](docs/diagrams/system-component.md) for the full C4 component diagram.
+
 ```
 ┌─────────────────────────────────────────┐
 │        Frontend (React/Vite)            │
 │  Dashboards, charts, project config UI  │
 └────────────────┬────────────────────────┘
-                 │ /api/* (HTTPS)
+                 │ /api/* (HTTP/HTTPS)
 ┌────────────────▼────────────────────────┐
 │  Backend (FastAPI)                      │
 │  ├─ API routes (api/*.py)               │
@@ -113,11 +116,11 @@ Each synced work item has these fields:
 │  ├─ Services (services/*.py)            │
 │  └─ Scheduler (scheduler.py)            │
 └────────────────┬────────────────────────┘
-                 │
+                 │ SQLAlchemy ORM
 ┌────────────────▼────────────────────────┐
-│  Data Layer (SQLAlchemy)                │
+│  Data Layer                             │
 │  ├─ Models (models/*.py)                │
-│  └─ Database (SQLite file)              │
+│  └─ SQLite (oannes.db via EncryptedJSON)│
 └─────────────────────────────────────────┘
 ```
 
@@ -145,6 +148,8 @@ All endpoints require:
 - Optional: `weeks` query param (default: 12 weeks lookback)
 
 ### Database Models
+
+See [`docs/diagrams/data-model.md`](docs/diagrams/data-model.md) for the full ERD.
 
 ```python
 Project(id, name, platform, credentials, sync_frequency, last_synced_at, created_at)
@@ -524,4 +529,24 @@ docker-compose up
 
 ---
 
-**Last updated**: 2026-04-13 (build #1)
+## UML Diagrams
+
+All diagrams are stored in [`docs/diagrams/`](docs/diagrams/) as Mermaid source files. They render natively in GitHub, GitLab, and VS Code with the Mermaid extension.
+
+| Diagram | File | Type | What it shows |
+|---|---|---|---|
+| System Components | [system-component.md](docs/diagrams/system-component.md) | C4 Component | Full component map: browser, Docker container, SQLite, external platforms |
+| Data Model (ERD) | [data-model.md](docs/diagrams/data-model.md) | ER Diagram | All DB tables and their relationships |
+| Connector Classes | [connector-classes.md](docs/diagrams/connector-classes.md) | Class Diagram | `BaseConnector` hierarchy — Jira, Trello, Azure, GitLab, CSV, Linear, Shortcut |
+| Connector Config Models | [connector-config-models.md](docs/diagrams/connector-config-models.md) | Class Diagram | Pydantic validation models for all connector types |
+| Sync Flow | [sync-flow-sequence.md](docs/diagrams/sync-flow-sequence.md) | Sequence Diagram | User-triggered + scheduled sync: API → SyncService → Connector → DB |
+| Metrics Request | [metrics-request-sequence.md](docs/diagrams/metrics-request-sequence.md) | Sequence Diagram | Metrics endpoint → Calculator → Plotly chart render |
+| Project Creation | [project-creation-sequence.md](docs/diagrams/project-creation-sequence.md) | Sequence Diagram | Wizard → validate → encrypt → save → first sync |
+| Work Item Stages | [work-item-stage-state.md](docs/diagrams/work-item-stage-state.md) | State Machine | Stage transitions: queue → in_flight → review → done, with metric annotations |
+| Credential Encryption | [encryption-flow.md](docs/diagrams/encryption-flow.md) | Sequence Diagram | Key loading (env var / auto-generate) and encrypt/decrypt lifecycle |
+
+> **Keep diagrams in sync.** If you change a model, connector, or API route, update the relevant diagram(s) and note the change in your commit message.
+
+---
+
+**Last updated**: 2026-04-29

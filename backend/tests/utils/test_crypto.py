@@ -189,6 +189,16 @@ class TestKeyLoading:
         ct = fernet.encrypt(b"hello")
         assert fernet.decrypt(ct) == b"hello"
 
+    def test_invalid_key_in_env_var_raises_immediately(self, monkeypatch):
+        """An invalid OANNES_SECRET_KEY must raise ValueError on get_fernet(), not silently fail later."""
+        import utils.crypto as crypto
+
+        monkeypatch.setenv("OANNES_SECRET_KEY", "not-a-valid-fernet-key")
+        crypto._fernet = None   # force reload
+
+        with pytest.raises(ValueError, match="OANNES_SECRET_KEY is not a valid Fernet key"):
+            crypto.get_fernet()
+
     def test_get_fernet_returns_same_instance(self):
         """The singleton must return the same Fernet object on repeated calls."""
         from utils.crypto import get_fernet
@@ -348,6 +358,16 @@ class TestKeyLoading:
         # Verify the loaded key can actually encrypt/decrypt
         ct = fernet.encrypt(b"hello")
         assert fernet.decrypt(ct) == b"hello"
+
+    def test_invalid_key_in_env_var_raises_immediately(self, monkeypatch):
+        """An invalid OANNES_SECRET_KEY must raise ValueError on get_fernet(), not silently fail on first write."""
+        import utils.crypto as crypto
+
+        monkeypatch.setenv("OANNES_SECRET_KEY", "not-a-valid-fernet-key")
+        crypto._fernet = None  # force reload
+
+        with pytest.raises(ValueError, match="OANNES_SECRET_KEY is not a valid Fernet key"):
+            crypto.get_fernet()
 
     def test_get_fernet_returns_same_instance(self):
         """The singleton must return the same Fernet object on repeated calls."""

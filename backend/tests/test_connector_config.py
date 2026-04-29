@@ -4,7 +4,7 @@ import pytest
 from models.connector_config import (
     JiraConfig, CSVConfig, TrelloConfig, AzureDevOpsConfig,
     GitLabConfig, LinearConfig, ShortcutConfig,
-    validate_connector_config, AuthTypeEnum
+    validate_connector_config,
 )
 from pydantic import ValidationError
 
@@ -48,7 +48,7 @@ class TestJiraConfig:
             jira_url="https://company.atlassian.net",
             username="user@company.com",
             personal_access_token="pat-token",
-            auth_type=AuthTypeEnum.PERSONAL_ACCESS_TOKEN
+            auth_type="personal_access_token"
         )
         assert config.auth_type == "personal_access_token"
         assert config.personal_access_token == "pat-token"
@@ -59,7 +59,7 @@ class TestJiraConfig:
             JiraConfig(
                 jira_url="https://company.atlassian.net",
                 username="user@company.com",
-                auth_type=AuthTypeEnum.API_TOKEN
+                auth_type="api_token"
             )
         assert "api_token" in str(exc.value).lower()
     
@@ -69,7 +69,7 @@ class TestJiraConfig:
             JiraConfig(
                 jira_url="https://company.atlassian.net",
                 username="user@company.com",
-                auth_type=AuthTypeEnum.PERSONAL_ACCESS_TOKEN
+                auth_type="personal_access_token"
             )
         assert "personal_access_token" in str(exc.value).lower()
     
@@ -109,6 +109,47 @@ class TestJiraConfig:
                 username="user@company.com",
                 api_token="token",
                 request_delay_ms=5001
+            )
+
+    def test_api_version_v2_accepted(self):
+        """api_version 'v2' should be accepted."""
+        config = JiraConfig(
+            jira_url="https://company.atlassian.net",
+            username="user@company.com",
+            api_token="token",
+            api_version="v2"
+        )
+        assert config.api_version == "v2"
+
+    def test_api_version_v3_accepted(self):
+        """api_version 'v3' should be accepted."""
+        config = JiraConfig(
+            jira_url="https://company.atlassian.net",
+            username="user@company.com",
+            api_token="token",
+            api_version="v3"
+        )
+        assert config.api_version == "v3"
+
+    def test_api_version_auto_rejected(self):
+        """api_version 'auto' must be rejected — auto-detect was removed."""
+        with pytest.raises(ValidationError) as exc:
+            JiraConfig(
+                jira_url="https://company.atlassian.net",
+                username="user@company.com",
+                api_token="token",
+                api_version="auto"
+            )
+        assert "v2" in str(exc.value) or "v3" in str(exc.value)
+
+    def test_api_version_invalid_string_rejected(self):
+        """Any unknown api_version value must be rejected."""
+        with pytest.raises(ValidationError):
+            JiraConfig(
+                jira_url="https://company.atlassian.net",
+                username="user@company.com",
+                api_token="token",
+                api_version="v1"
             )
 
 

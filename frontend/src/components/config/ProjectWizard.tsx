@@ -62,16 +62,9 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [platform, setPlatform] = useState(existing?.platform ?? '')
   const [name, setName] = useState(existing?.name ?? '')
   const [config, setConfig] = useState<Record<string, string>>(() => {
-    const baseConfig = existing?.config ?? {}
-    // Set defaults for Jira if creating new project
-    if (!existing) {
-      if (!baseConfig.auth_type) {
-        baseConfig.auth_type = 'api_token'
-      }
-      if (!baseConfig.jira_api_version) {
-        baseConfig.jira_api_version = 'v2'
-      }
-    }
+    const baseConfig = { ...(existing?.config ?? {}) }
+    if (!baseConfig.auth_type) baseConfig.auth_type = 'api_token'
+    if (!baseConfig.jira_api_version) baseConfig.jira_api_version = 'v2'
     return baseConfig
   })
   const [boards, setBoards] = useState<Array<{ id: string; name: string }>>([])
@@ -80,7 +73,7 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [workflowMap, setWorkflowMap] = useState<Record<string, string>>(
     Object.fromEntries(existing?.workflow_steps?.map(s => s.source_statuses.map(ss => [ss, s.stage])).flat() ?? [])
   )
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string; api_version_detected?: string | null } | null>(null)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [draggedStatus, setDraggedStatus] = useState<string | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
@@ -375,14 +368,7 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
 
               {testResult && (
                 <AlertBanner type={testResult.success ? 'info' : 'error'}>
-                  <div>
-                    <div>{testResult.message}</div>
-                    {testResult.api_version_detected && (
-                      <div className="text-[10px] mt-1 opacity-75">
-                        API Version: {testResult.api_version_detected.toUpperCase()}
-                      </div>
-                    )}
-                  </div>
+                  {testResult.message}
                 </AlertBanner>
               )}
 

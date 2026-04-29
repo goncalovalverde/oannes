@@ -8,16 +8,7 @@ Each connector has specific required and optional fields. These models provide:
 """
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, List, Dict, Any
-from enum import Enum
-
-
-class AuthTypeEnum(str, Enum):
-    """Supported authentication types."""
-    API_TOKEN = "api_token"
-    PERSONAL_ACCESS_TOKEN = "personal_access_token"
-    OAUTH = "oauth"
-
+from typing import Optional, List, Dict, Any, Literal
 
 class JiraConfig(BaseModel):
     """Validates Jira connector configuration.
@@ -56,8 +47,8 @@ class JiraConfig(BaseModel):
         None,
         description="Personal access token (for personal_access_token auth type)"
     )
-    auth_type: AuthTypeEnum = Field(
-        AuthTypeEnum.API_TOKEN,
+    auth_type: Literal["api_token", "personal_access_token", "oauth"] = Field(
+        "api_token",
         description="Authentication type"
     )
     project_key: Optional[str] = Field(
@@ -68,7 +59,7 @@ class JiraConfig(BaseModel):
         None,
         description="Custom JQL query for filtering issues"
     )
-    api_version: str = Field(
+    api_version: Literal["v2", "v3"] = Field(
         "v2",
         description="Jira REST API version to use: 'v2' (Server/Data Center) or 'v3' (Cloud)"
     )
@@ -96,7 +87,7 @@ class JiraConfig(BaseModel):
         if v.endswith('/'):
             return v[:-1]  # Remove trailing slash
         return v
-    
+
     @model_validator(mode='before')
     @classmethod
     def normalize_field_names(cls, data):
@@ -131,12 +122,12 @@ class JiraConfig(BaseModel):
             raise ValueError('jira_url is required')
         
         # Validate auth-specific requirements
-        if self.auth_type == AuthTypeEnum.API_TOKEN:
+        if self.auth_type == "api_token":
             if not self.username:
                 raise ValueError('username is required when auth_type is "api_token"')
             if not self.api_token:
                 raise ValueError('api_token is required when auth_type is "api_token"')
-        elif self.auth_type == AuthTypeEnum.PERSONAL_ACCESS_TOKEN:
+        elif self.auth_type == "personal_access_token":
             if not self.personal_access_token:
                 raise ValueError('personal_access_token is required when auth_type is "personal_access_token"')
         

@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 def _load_or_create_key() -> bytes:
     env_key = os.getenv("OANNES_SECRET_KEY")
     if env_key:
+        try:
+            Fernet(env_key.encode())
+        except Exception:
+            raise ValueError(
+                "OANNES_SECRET_KEY is not a valid Fernet key. "
+                "Generate one with: python3 -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
         return env_key.encode()
 
     data_dir = Path(os.getenv("DATA_DIR", Path.home() / ".oannes"))

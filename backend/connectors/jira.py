@@ -395,7 +395,7 @@ class JiraConnector(BaseConnector):
                 logger.error(f"[Jira Test]     Status Code: {e.status_code}")
             user_message = _format_jira_error(e, context="during connection test")
             logger.error(f"[Jira Test] ❌ Connection failed: {type(e).__name__}: {str(e)}", exc_info=True)
-            return {"success": False, "message": user_message, "boards": [], "api_version_detected": None}
+            return {"success": False, "message": user_message, "boards": []}
 
     def _test_connection_v3(self) -> dict:
         """Test connection using v3 API endpoints (Jira Cloud)."""
@@ -419,7 +419,6 @@ class JiraConnector(BaseConnector):
                 "success": True,
                 "message": f"Connected successfully (API v3). Found {len(projects)} projects.",
                 "boards": [{"id": p.get("key"), "name": p.get("name")} for p in projects],
-                "api_version_detected": "v3"
             }
         except Exception as e:
             logger.error(f"[Jira Test v3] Error: {type(e).__name__}: {str(e)}")
@@ -440,7 +439,6 @@ class JiraConnector(BaseConnector):
                 "success": True,
                 "message": f"Connected successfully (API v2). Found {len(projects)} projects.",
                 "boards": [{"id": p.key, "name": p.name} for p in projects],
-                "api_version_detected": "v2"
             }
         except Exception as e:
             logger.error(f"[Jira Test v2] Error: {type(e).__name__}: {str(e)}")

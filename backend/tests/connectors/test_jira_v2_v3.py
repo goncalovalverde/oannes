@@ -1,4 +1,4 @@
-"""Tests for Jira v2/v3 API fallback and version detection."""
+"""Tests for Jira v2/v3 API version selection."""
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from jira import JIRAError
@@ -13,135 +13,6 @@ def normalize_jira_config(config: dict) -> dict:
     from validate_connector_config().
     """
     return validate_connector_config('jira', config)
-
-
-class TestJiraApiVersionResolution:
-    """Test _resolve_api_version() method."""
-
-    def test_auto_detect_v3_success(self):
-        """Auto-detect should return v3 when v3 endpoint succeeds."""
-        from connectors.jira import JiraConnector
-
-        connector = JiraConnector(normalize_jira_config({
-            'url': 'https://jira.example.com',
-            'email': 'user@example.com',
-            'api_token': 'token',
-            'jira_api_version': 'auto'
-        }), [])
-
-        with patch('jira.JIRA') as mock_jira_class:
-            mock_jira = Mock()
-            mock_session = Mock()
-            mock_resp = Mock()
-            mock_resp.status_code = 200
-            mock_session.get.return_value = mock_resp
-            mock_jira._session = mock_session
-            mock_jira_class.return_value = mock_jira
-
-            result = connector._resolve_api_version()
-
-            assert result == "v3"
-            # Verify that v3 endpoint was tested
-            called_url = mock_session.get.call_args[0][0]
-            assert '/rest/api/3/myself' in called_url
-
-    def test_auto_detect_v3_404_fallback_to_v2(self):
-        """Auto-detect should fallback to v2 when v3 returns 404."""
-        from connectors.jira import JiraConnector
-
-        connector = JiraConnector(normalize_jira_config({
-            'url': 'https://jira.example.com',
-            'email': 'user@example.com',
-            'api_token': 'token',
-            'jira_api_version': 'auto'
-        }), [])
-
-        with patch('jira.JIRA') as mock_jira_class:
-            mock_jira = Mock()
-            mock_session = Mock()
-            mock_resp = Mock()
-            mock_resp.status_code = 404
-            mock_session.get.return_value = mock_resp
-            mock_jira._session = mock_session
-            mock_jira_class.return_value = mock_jira
-
-            result = connector._resolve_api_version()
-
-            assert result == "v2"
-
-    def test_force_v3_skips_detection(self):
-        """Explicitly set v3 should skip auto-detect."""
-        from connectors.jira import JiraConnector
-
-        connector = JiraConnector(normalize_jira_config({
-            'url': 'https://jira.example.com',
-            'email': 'user@example.com',
-            'api_token': 'token',
-            'jira_api_version': 'v3'
-        }), [])
-
-        result = connector._resolve_api_version()
-
-        assert result == "v3"
-
-    def test_force_v2_skips_detection(self):
-        """Explicitly set v2 should skip auto-detect."""
-        from connectors.jira import JiraConnector
-
-        connector = JiraConnector(normalize_jira_config({
-            'url': 'https://jira.example.com',
-            'email': 'user@example.com',
-            'api_token': 'token',
-            'jira_api_version': 'v2'
-        }), [])
-
-        result = connector._resolve_api_version()
-
-        assert result == "v2"
-
-    def test_auto_detect_auth_error_reraises(self):
-        """Auto-detect should re-raise auth errors (401/403), not assume v2."""
-        from connectors.jira import JiraConnector
-
-        connector = JiraConnector(normalize_jira_config({
-            'url': 'https://jira.example.com',
-            'email': 'user@example.com',
-            'api_token': 'bad_token',
-            'jira_api_version': 'auto'
-        }), [])
-
-        with patch('jira.JIRA') as mock_jira_class:
-            mock_jira_class.side_effect = JIRAError(status_code=401, text='Unauthorized')
-
-            with pytest.raises(JIRAError) as exc_info:
-                connector._resolve_api_version()
-
-            assert exc_info.value.status_code == 401
-
-    def test_default_version_is_auto(self):
-        """Default jira_api_version should be 'auto' when not specified."""
-        from connectors.jira import JiraConnector
-
-        connector = JiraConnector(normalize_jira_config({
-            'url': 'https://jira.example.com',
-            'email': 'user@example.com',
-            'api_token': 'token'
-            # No jira_api_version specified
-        }), [])
-
-        with patch('jira.JIRA') as mock_jira_class:
-            mock_jira = Mock()
-            mock_session = Mock()
-            mock_resp = Mock()
-            mock_resp.status_code = 200
-            mock_session.get.return_value = mock_resp
-            mock_jira._session = mock_session
-            mock_jira_class.return_value = mock_jira
-
-            result = connector._resolve_api_version()
-
-            # Should default to auto-detect and return v3
-            assert result == "v3"
 
 
 class TestJiraV2Search:
@@ -307,11 +178,11 @@ class TestJiraFetchItemsVersionSelection:
             assert '/rest/api/2/search' in called_url
 
 
-class TestJiraTestConnectionVersionDetection:
-    """Test test_connection() API version detection."""
+class TestJiraTestConnection:
+    """Test test_connection() for v2 and v3."""
 
-    def test_test_connection_returns_api_version_detected_v3(self):
-        """test_connection should return api_version_detected=v3 when v3 works."""
+    def test_test_connection_v3_success(self):
+        """test_connection with v3 returns success and boards."""
         from connectors.jira import JiraConnector
 
         connector = JiraConnector(normalize_jira_config({
@@ -319,26 +190,18 @@ class TestJiraTestConnectionVersionDetection:
             'auth_type': 'api_token',
             'email': 'user@example.com',
             'api_token': 'token',
-            'jira_api_version': 'auto'
+            'jira_api_version': 'v3'
         }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira = Mock()
             mock_session = Mock()
-            
-            # Mock responses for all v3 calls:
-            # 1. Auto-detect myself call
-            # 2. Test v3 myself endpoint
-            # 3. Test v3 projects endpoint
             v3_resp = Mock()
             v3_resp.raise_for_status.return_value = None
-            v3_resp.status_code = 200
             v3_resp.json.side_effect = [
-                {"displayName": "Test User"},  # Auto-detect myself
-                {"displayName": "Test User"},  # Test myself
-                {"values": [{"key": "PROJ1", "name": "Project 1"}]}  # Test projects
+                {"displayName": "Test User"},
+                {"values": [{"key": "PROJ1", "name": "Project 1"}]}
             ]
-            
             mock_session.get.return_value = v3_resp
             mock_jira._session = mock_session
             mock_jira_class.return_value = mock_jira
@@ -346,11 +209,12 @@ class TestJiraTestConnectionVersionDetection:
             result = connector.test_connection()
 
             assert result['success'] is True
-            assert result['api_version_detected'] == 'v3'
             assert 'API v3' in result['message']
+            assert len(result['boards']) == 1
+            assert 'api_version_detected' not in result
 
-    def test_test_connection_returns_api_version_detected_v2(self):
-        """test_connection should return api_version_detected=v2 when forced v2."""
+    def test_test_connection_v2_success(self):
+        """test_connection with v2 returns success and boards."""
         from connectors.jira import JiraConnector
 
         connector = JiraConnector(normalize_jira_config({
@@ -363,19 +227,18 @@ class TestJiraTestConnectionVersionDetection:
 
         with patch('jira.JIRA') as mock_jira_class:
             mock_jira = Mock()
-            mock_jira.projects.return_value = [
-                Mock(key='PROJ1', name='Project 1')
-            ]
+            mock_jira.projects.return_value = [Mock(key='PROJ1', name='Project 1')]
             mock_jira_class.return_value = mock_jira
 
             result = connector.test_connection()
 
             assert result['success'] is True
-            assert result['api_version_detected'] == 'v2'
             assert 'API v2' in result['message']
+            assert len(result['boards']) == 1
+            assert 'api_version_detected' not in result
 
-    def test_test_connection_failure_includes_api_version_detected_none(self):
-        """test_connection failure should include api_version_detected=None."""
+    def test_test_connection_failure_returns_error(self):
+        """test_connection returns success=False on auth failure."""
         from connectors.jira import JiraConnector
 
         connector = JiraConnector(normalize_jira_config({
@@ -383,7 +246,7 @@ class TestJiraTestConnectionVersionDetection:
             'auth_type': 'api_token',
             'email': 'bad@example.com',
             'api_token': 'bad_token',
-            'jira_api_version': 'auto'
+            'jira_api_version': 'v2'
         }), [])
 
         with patch('jira.JIRA') as mock_jira_class:
@@ -392,7 +255,8 @@ class TestJiraTestConnectionVersionDetection:
             result = connector.test_connection()
 
             assert result['success'] is False
-            assert result['api_version_detected'] is None
+            assert result['boards'] == []
+            assert 'api_version_detected' not in result
 
 
 class TestJiraErrorMessagesV2Suggestion:
