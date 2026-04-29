@@ -20,6 +20,7 @@ export default function CycleTime() {
   const scatter = rawData.map((item: any) => ({
     completed_at: item.date,
     cycle_time_days: item.value,
+    item_type: item.by_type?.item_type || 'Unknown',
     item_key: item.by_type?.item_key || '',
   }))
 
