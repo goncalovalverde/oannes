@@ -1,6 +1,7 @@
 import { useFilterStore } from '../store/filterStore'
 import { useThroughput, useMetricsSummary } from '../api/hooks/useMetrics'
 import ThroughputChart from '../components/charts/ThroughputChart'
+import ThroughputHistogram from '../components/charts/ThroughputHistogram'
 import { ChartSkeleton } from '../components/ui/LoadingSkeleton'
 import EmptyState from '../components/ui/EmptyState'
 
@@ -70,6 +71,14 @@ export default function Throughput() {
           💡 Your team completes an average of <strong className="text-text">{avg.toFixed(1)} items per week</strong>.
           The dashed line shows the trend over the selected period.
         </div>
+      </div>
+
+      <div className="bg-surface border border-border rounded-xl p-5">
+        <div className="text-sm font-bold mb-1">Distribution</div>
+        <div className="text-xs text-muted mb-4">How often does each throughput count occur? — dashed line is the average</div>
+        {isLoading ? <ChartSkeleton /> : (
+          <ThroughputHistogram data={chartData.map((d: any) => d.Total)} avg={avg} />
+        )}
       </div>
     </div>
   )
