@@ -43,7 +43,7 @@ class TrelloConnector(BaseConnector):
             return []
     
     def fetch_items(self) -> pd.DataFrame:
-        board_id = self.config.get("board_id", "")
+        board_id = self.config.get("project_key", "")
         status_map = self._build_status_map()
         step_names = [s["display_name"] for s in self.workflow_steps]
         

@@ -74,14 +74,13 @@ class TestTestConnection:
         assert r.status_code == 422
 
     def test_unknown_platform_still_returns_200(self, client):
-        """Unknown platform: validator has no model — passes through to connector factory."""
+        """Unknown platform: validate_connector_config raises ValueError → 422."""
         r = client.post("/api/connectors/test", json={
             "platform": "unknown_platform",
             "config": {},
         })
-        # Connector factory raises → endpoint catches and returns success=False
-        assert r.status_code == 200
-        assert r.json()["success"] is False
+        # validate_connector_config raises ValueError for unknown platform → 422
+        assert r.status_code == 422
 
     # ------------------------------------------------------------------
     # Response shape

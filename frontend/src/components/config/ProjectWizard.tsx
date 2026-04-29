@@ -18,12 +18,12 @@ const PLATFORMS = [
 
 const PLATFORM_FIELDS: Record<string, Array<{ key: string; label: string; type?: string; placeholder?: string; help?: string; optional?: boolean; default?: string; options?: Array<{value: string; label: string}>; conditional?: (config: Record<string, string>) => boolean }>> = {
   jira: [
-    { key: 'url',       label: 'Jira URL',    placeholder: 'https://yourcompany.atlassian.net' },
+    { key: 'jira_url',  label: 'Jira URL',    placeholder: 'https://yourcompany.atlassian.net' },
     { key: 'auth_type', label: 'Authentication Type', type: 'select', optional: false, default: 'api_token', options: [{ value: 'api_token', label: 'API Token (Email + Token)' }, { value: 'personal_access_token', label: 'Personal Access Token' }], help: 'Choose based on your Jira instance configuration' },
-    { key: 'email',     label: 'Email',       type: 'email', placeholder: 'you@company.com', conditional: (cfg) => cfg.auth_type === 'api_token' },
+    { key: 'username',  label: 'Email',       type: 'email', placeholder: 'you@company.com', conditional: (cfg) => cfg.auth_type === 'api_token' },
     { key: 'api_token', label: 'API Token',   type: 'password', help: 'Create at: id.atlassian.com/manage-profile/security/api-tokens', conditional: (cfg) => cfg.auth_type === 'api_token' },
     { key: 'personal_access_token', label: 'Personal Access Token', type: 'password', help: 'Create at: your Jira instance → Profile → Personal Access Tokens', conditional: (cfg) => cfg.auth_type === 'personal_access_token' },
-    { key: 'jira_api_version', label: 'API Version', type: 'select', optional: false, default: 'v2', options: [{ value: 'v2', label: 'v2 — Server / Data Center' }, { value: 'v3', label: 'v3 — Cloud' }], help: 'Use v2 for self-hosted Jira; use v3 for Jira Cloud (atlassian.net).' },
+    { key: 'api_version', label: 'API Version', type: 'select', optional: false, default: 'v2', options: [{ value: 'v2', label: 'v2 — Server / Data Center' }, { value: 'v3', label: 'v3 — Cloud' }], help: 'Use v2 for self-hosted Jira; use v3 for Jira Cloud (atlassian.net).' },
     { key: 'jql',       label: 'JQL Filter',  placeholder: 'project = MYPROJ', optional: true },
     { key: 'request_delay_ms', label: 'Request Delay (ms)', type: 'number', default: '100', optional: true, help: 'Add delay between API requests to avoid rate limiting. Recommended: 100-500ms for large projects.' },
   ],
@@ -51,31 +51,6 @@ const STAGE_DESCS: Record<string, string> = {
   done:      'Cycle time ends here',
 }
 
-/** Reverse-map stored config field names back to form field keys.
- *
- * The backend normalises submitted form keys (e.g. url → jira_url) before
- * saving. When loading an existing project we must undo that mapping so each
- * form field finds its value by its own key.
- */
-function toFormConfig(platform: string, stored: Record<string, unknown>): Record<string, string> {
-  const c = { ...stored } as Record<string, string>
-  if (platform === 'jira') {
-    if (c.jira_url)   { c.url   = c.jira_url;   delete c.jira_url }
-    if (c.username)   { c.email = c.username;    delete c.username }
-    if (c.api_version){ c.jira_api_version = c.api_version; delete c.api_version }
-  }
-  if (platform === 'gitlab') {
-    if (c.gitlab_url)    { c.url          = c.gitlab_url;    delete c.gitlab_url }
-    if (c.private_token) { c.access_token = c.private_token; delete c.private_token }
-  }
-  if (platform === 'trello') {
-    if (c.api_token) { c.token = c.api_token; delete c.api_token }
-  }
-  if (platform === 'azure_devops') {
-    if (c.pat) { c.personal_access_token = c.pat; delete c.pat }
-  }
-  return c
-}
 
 interface Props {
   existing?: Project
@@ -88,11 +63,9 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [platform, setPlatform] = useState(existing?.platform ?? '')
   const [name, setName] = useState(existing?.name ?? '')
   const [config, setConfig] = useState<Record<string, string>>(() => {
-    const baseConfig = existing
-      ? toFormConfig(existing.platform, existing.config ?? {})
-      : {}
+    const baseConfig = { ...(existing?.config ?? {}) } as Record<string, string>
     if (!baseConfig.auth_type) baseConfig.auth_type = 'api_token'
-    if (!baseConfig.jira_api_version || baseConfig.jira_api_version === 'auto') baseConfig.jira_api_version = 'v2'
+    if (!baseConfig.api_version || baseConfig.api_version === 'auto') baseConfig.api_version = 'v2'
     return baseConfig
   })
   const [boards, setBoards] = useState<Array<{ id: string; name: string }>>([])
@@ -115,8 +88,8 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
       if (!config.auth_type) {
         setConfig(c => ({ ...c, auth_type: 'api_token' }))
       }
-      if (!config.jira_api_version || config.jira_api_version === 'auto') {
-        setConfig(c => ({ ...c, jira_api_version: 'v2' }))
+      if (!config.api_version || config.api_version === 'auto') {
+        setConfig(c => ({ ...c, api_version: 'v2' }))
       }
     }
   }, [platform])

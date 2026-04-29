@@ -58,8 +58,8 @@ def list_projects(db: Session = Depends(get_db)):
 
 @router.post("/", response_model=ProjectOut)
 def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
-    # Validate config before saving and normalize field names
-    if data.config:
+    # Validate config before saving and normalize field names (always, even empty dict)
+    if data.config is not None:
         try:
             data.config = validate_connector_config(data.platform, data.config)
         except ValueError as e:

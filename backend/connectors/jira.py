@@ -594,7 +594,7 @@ class JiraConnector(BaseConnector):
         This method fetches the complete history when that happens.
         """
         jira = self._get_client()
-        base_url = self.config["url"].rstrip("/")
+        base_url = self.config["jira_url"].rstrip("/")
         url = f"{base_url}/rest/api/2/issue/{issue_key}/changelog"
         all_histories: list = []
         start = 0

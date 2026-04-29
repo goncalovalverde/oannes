@@ -70,8 +70,8 @@ class TestGetConnectorValidation:
         """Should instantiate Trello connector with valid config."""
         config = {
             "api_key": "key123",
-            "api_token": "token456",
-            "board_id": "board789"
+            "token": "token456",
+            "project_key": "board789"
         }
         connector = get_connector("trello", config, [])
         assert connector is not None

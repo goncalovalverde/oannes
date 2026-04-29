@@ -77,11 +77,59 @@ def migrate_schema() -> None:
             db.execute(text("ALTER TABLE projects ADD COLUMN rate_limit_retry_delay FLOAT"))
             db.commit()
             logger.info("Schema migration: added rate_limit_retry_delay column to projects")
+        
+        _migrate_connector_config_field_names(db)
     except Exception as e:
         logger.error(f"Schema migration failed: {e}")
         db.rollback()
     finally:
         db.close()
+
+def _migrate_connector_config_field_names(db) -> None:
+    """Rename legacy connector config field names to canonical unified names.
+
+    Old field names were model-canonical; new names match what connectors read directly.
+    Renames (per platform, idempotent):
+      GitLab:  gitlab_url → url, private_token → access_token, project_id → project_key
+      Trello:  api_token  → token, board_id → project_key
+      Azure:   organization → org_url, pat → personal_access_token, project → project_key
+      Jira:    (no renames needed — model and connector already agreed)
+    """
+    import json
+    from sqlalchemy import text
+
+    RENAMES = {
+        "gitlab": {"gitlab_url": "url", "private_token": "access_token", "project_id": "project_key"},
+        "trello": {"api_token": "token", "board_id": "project_key"},
+        "azure_devops": {"organization": "org_url", "pat": "personal_access_token", "project": "project_key"},
+    }
+
+    rows = db.execute(text("SELECT id, platform, config FROM projects")).fetchall()
+    migrated = 0
+    for row in rows:
+        project_id, platform, config_raw = row
+        if platform not in RENAMES or not config_raw:
+            continue
+        try:
+            config = json.loads(config_raw) if isinstance(config_raw, str) else dict(config_raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        changes = RENAMES[platform]
+        updated = False
+        for old_key, new_key in changes.items():
+            if old_key in config and new_key not in config:
+                config[new_key] = config.pop(old_key)
+                updated = True
+        if updated:
+            db.execute(
+                text("UPDATE projects SET config = :config WHERE id = :id"),
+                {"config": json.dumps(config), "id": project_id},
+            )
+            migrated += 1
+    if migrated:
+        db.commit()
+        logger.info(f"Config field name migration: updated {migrated} project(s)")
+
 
 def check_database_integrity() -> str:
     """Verify SQLite database is not corrupted using PRAGMA integrity_check."""

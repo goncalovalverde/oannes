@@ -37,12 +37,12 @@ class GitLabConnector(BaseConnector):
     
     def fetch_items(self) -> pd.DataFrame:
         gl = self._get_client()
-        project_id = self.config.get("project_id", "")
+        project_key = self.config.get("project_key", "")
         
-        if not project_id:
-            raise ValueError("project_id required for GitLab connector")
+        if not project_key:
+            raise ValueError("project_key required for GitLab connector")
         
-        project = gl.projects.get(project_id)
+        project = gl.projects.get(project_key)
         status_map = self._build_status_map()
         step_names = [s["display_name"] for s in self.workflow_steps]
         

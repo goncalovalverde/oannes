@@ -6,7 +6,7 @@ def _create_project(client, name="Test Project", platform="csv"):
     payload = {
         "name": name,
         "platform": platform,
-        "config": {"file_path": "/tmp/test.csv"},
+        "config": {},
         "workflow_steps": [
             {"display_name": "Backlog",     "stage": "queue", "position": 0, "source_statuses": ["Backlog"]},
             {"display_name": "In Progress", "stage": "start", "position": 1, "source_statuses": ["In Progress"]},
@@ -72,7 +72,7 @@ class TestProjectsCRUD:
         get_resp = client.get(f"/api/projects/{project_id}")
         config = get_resp.json().get("config", {})
         # The decrypted value should match what we put in
-        assert config.get("file_path") == "/tmp/test.csv"
+        assert config.get("delimiter") == ","
 
     def test_workflow_steps_created(self, client):
         resp = _create_project(client)
@@ -171,7 +171,7 @@ class TestProjectCreateValidation:
     def test_create_invalid_stage_in_workflow_returns_422(self, client):
         r = client.post("/api/projects", json={
             "name": "Bad", "platform": "csv",
-            "config": {"file_path": "/f.csv"},
+            "config": {},
             "workflow_steps": [
                 {"display_name": "Backlog", "stage": "invalid_stage",
                  "position": 0, "source_statuses": []}

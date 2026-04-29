@@ -229,12 +229,12 @@ class TestTrelloConfig:
         """Minimal valid Trello config."""
         config = TrelloConfig(
             api_key="key123",
-            api_token="token456",
-            board_id="board789"
+            token="token456",
+            project_key="board789"
         )
         assert config.api_key == "key123"
-        assert config.api_token == "token456"
-        assert config.board_id == "board789"
+        assert config.token == "token456"
+        assert config.project_key == "board789"
 
 
 class TestAzureDevOpsConfig:
@@ -243,13 +243,13 @@ class TestAzureDevOpsConfig:
     def test_minimal_azure_config(self):
         """Minimal valid Azure DevOps config."""
         config = AzureDevOpsConfig(
-            organization="my-org",
-            project="my-project",
-            pat="pat-token"
+            org_url="https://dev.azure.com/my-org",
+            personal_access_token="pat-token",
+            project_key="my-project"
         )
-        assert config.organization == "my-org"
-        assert config.project == "my-project"
-        assert config.pat == "pat-token"
+        assert config.org_url == "https://dev.azure.com/my-org"
+        assert config.personal_access_token == "pat-token"
+        assert config.project_key == "my-project"
 
 
 class TestGitLabConfig:
@@ -258,20 +258,20 @@ class TestGitLabConfig:
     def test_minimal_gitlab_config(self):
         """Minimal valid GitLab config."""
         config = GitLabConfig(
-            gitlab_url="https://gitlab.company.com",
-            project_id="123",
-            private_token="token"
+            url="https://gitlab.company.com",
+            project_key="123",
+            access_token="token"
         )
-        assert config.gitlab_url == "https://gitlab.company.com"
+        assert config.url == "https://gitlab.company.com"
     
     def test_gitlab_url_trailing_slash_removed(self):
         """Trailing slash should be removed from GitLab URL."""
         config = GitLabConfig(
-            gitlab_url="https://gitlab.company.com/",
-            project_id="123",
-            private_token="token"
+            url="https://gitlab.company.com/",
+            project_key="123",
+            access_token="token"
         )
-        assert config.gitlab_url == "https://gitlab.company.com"
+        assert config.url == "https://gitlab.company.com"
 
 
 class TestLinearConfig:
