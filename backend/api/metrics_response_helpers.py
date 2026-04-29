@@ -33,6 +33,10 @@ def build_throughput_response(
         trend_pct = float((np.mean(totals[half:]) - np.mean(totals[:half])) / np.mean(totals[:half]) * 100)
     else:
         trend_pct = 0.0
+
+    p50 = round(float(np.percentile(totals, 50)), 1) if totals else None
+    p85 = round(float(np.percentile(totals, 85)), 1) if totals else None
+    p95 = round(float(np.percentile(totals, 95)), 1) if totals else None
     
     metric_data = [
         MetricDataPoint(
@@ -47,7 +51,10 @@ def build_throughput_response(
         data=metric_data,
         stats=MetricStats(
             avg=round(avg, 1),
-            trend_pct=round(trend_pct, 1)
+            trend_pct=round(trend_pct, 1),
+            p50=p50,
+            p85=p85,
+            p95=p95
         ),
         unit="items",
         period=granularity

@@ -75,9 +75,14 @@ export default function Throughput() {
 
       <div className="bg-surface border border-border rounded-xl p-5">
         <div className="text-sm font-bold mb-1">Distribution</div>
-        <div className="text-xs text-muted mb-4">How often does each throughput count occur? — dashed line is the average</div>
+        <div className="text-xs text-muted mb-4">How often does each throughput count occur? — dashed lines show p50, p85, p95 percentiles</div>
         {isLoading ? <ChartSkeleton /> : (
-          <ThroughputHistogram data={chartData.map((d: any) => d.Total)} avg={avg} />
+          <ThroughputHistogram
+            data={chartData.map((d: any) => d.Total)}
+            p50={stats?.p50}
+            p85={stats?.p85}
+            p95={stats?.p95}
+          />
         )}
       </div>
     </div>
