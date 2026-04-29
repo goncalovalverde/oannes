@@ -64,7 +64,7 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
   const [config, setConfig] = useState<Record<string, string>>(() => {
     const baseConfig = { ...(existing?.config ?? {}) }
     if (!baseConfig.auth_type) baseConfig.auth_type = 'api_token'
-    if (!baseConfig.jira_api_version) baseConfig.jira_api_version = 'v2'
+    if (!baseConfig.jira_api_version || baseConfig.jira_api_version === 'auto') baseConfig.jira_api_version = 'v2'
     return baseConfig
   })
   const [boards, setBoards] = useState<Array<{ id: string; name: string }>>([])
@@ -87,7 +87,7 @@ export default function ProjectWizard({ existing, onClose, onSaved }: Props) {
       if (!config.auth_type) {
         setConfig(c => ({ ...c, auth_type: 'api_token' }))
       }
-      if (!config.jira_api_version) {
+      if (!config.jira_api_version || config.jira_api_version === 'auto') {
         setConfig(c => ({ ...c, jira_api_version: 'v2' }))
       }
     }
